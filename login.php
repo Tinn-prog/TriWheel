@@ -119,8 +119,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <!-- Right Side - Login Form -->
         <div class="auth-right">
-            <a href="index.php" class="mobile-back-home">
-                <i class="fas fa-arrow-left"></i> Back to Home
+            <a href="index.php" class="mobile-back-home" aria-label="Back to Home">
+                <i class="fas fa-arrow-left"></i>
+                <span class="sr-only">Back to Home</span>
             </a>
             <div class="auth-form-container">
                 <div class="auth-header">
