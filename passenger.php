@@ -241,8 +241,8 @@ $history = $historyStmt->get_result();
     <!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
-            <div class="logo logo-header-sec">
-                <img src="logo-header-sec.png" alt="TriWheel Logo" class="logo-img">
+            <div class="logo logo-header">
+                <img src="logo-header.png" alt="TriWheel Logo" class="logo-img">
                 <span class="logo-text">TriWheel</span>
             </div>
             <div class="hamburger" onclick="toggleSidebar()">
