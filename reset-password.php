@@ -38,7 +38,7 @@ if ($result->num_rows === 0) {
             $updateStmt = $conn->prepare("UPDATE users SET password = ?, reset_token = NULL, reset_expiry = NULL WHERE id = ?");
             $updateStmt->bind_param("si", $hashedPassword, $user['id']);
             if ($updateStmt->execute()) {
-                $success = "Password updated successfully. You can now <a href='login.php'>login</a> with your new password.";
+                $success = "Password updated successfully. You can now log in with your new password.";
             } else {
                 $error = "Failed to update password. Please try again.";
             }
@@ -103,7 +103,7 @@ if ($result->num_rows === 0) {
                 <?php if ($error): ?>
                     <div class="alert alert-error">
                         <i class="fas fa-exclamation-circle"></i>
-                        <?php echo htmlspecialchars($error); ?>
+                        <?php echo $error; ?>
                     </div>
                 <?php endif; ?>
 

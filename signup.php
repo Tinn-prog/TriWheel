@@ -143,6 +143,9 @@ $selectedRole = $_GET['role'] ?? '';
 
         <!-- Right Side - Signup Form -->
         <div class="auth-right">
+            <a href="index.php" class="mobile-back-home">
+                <i class="fas fa-arrow-left"></i> Back to Home
+            </a>
             <div class="auth-form-container">
                 <div class="auth-header">
                     <h2>Create Account</h2>
