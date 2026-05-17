@@ -190,8 +190,8 @@ if (isset($_SESSION['user_id'])) {
     <footer class="footer">
         <div class="container">
             <div class="footer-content" id="about">
-                <div class="footer-logo logo-header-sec">
-                    <img src="logo-header-sec.png" alt="TriWheel Logo" class="footer-logo-img">
+                <div class="footer-logo logo-header">
+                    <img src="logo-header.png" alt="TriWheel Logo" class="footer-logo-img">
                     <span class="footer-logo-text">TriWheel</span>
                     <p>Your reliable ride-hailing partner</p>
                 </div>
