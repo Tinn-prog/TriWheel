@@ -15,6 +15,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $post_email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $post_role = $_POST['role'] ?? '';
+    // Only allow passenger or driver from public signup
+    if (!in_array($post_role, ['passenger', 'driver'], true)) {
+        $post_role = 'passenger';
+    }
 
     // Validate input
     if (empty($post_first_name) || empty($post_last_name) || empty($post_email) || empty($post_contact) || empty($password) || empty($post_role)) {

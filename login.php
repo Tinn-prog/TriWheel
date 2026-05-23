@@ -25,14 +25,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['user_role'] = $user['role'];
                 $_SESSION['user_name'] = $user['name'];
+                // Regenerate session id and set activity timestamps
+                session_regenerate_id(true);
+                $_SESSION['last_activity'] = time();
+                $_SESSION['regen_time'] = time();
 
                 // Redirect based on role
                 if ($user['role'] === 'passenger') {
                     header("Location: passenger.php");
+                    exit;
                 } elseif ($user['role'] === 'driver') {
                     header("Location: driver.php");
+                    exit;
+                } elseif ($user['role'] === 'admin') {
+                    header("Location: admin_dashboard.php");
+                    exit;
+                } else {
+                    session_unset();
+                    session_destroy();
+                    $error = "Your account role is not set or is invalid. Please contact support or use a registered account.";
                 }
-                exit;
             }
         } else {
             $error = "Invalid email or password.";
