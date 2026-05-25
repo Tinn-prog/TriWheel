@@ -9,6 +9,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'driver') {
 }
 
 $userId = $_SESSION['user_id'];
+$error = '';
 
 // Prevent duplicate driver info
 $check = $conn->prepare("SELECT id FROM drivers WHERE user_id = ?");
@@ -21,33 +22,86 @@ if ($check->num_rows > 0) {
     exit;
 }
 
+function saveDriverDocument($fieldName, $prefix, &$error) {
+    if (!isset($_FILES[$fieldName]) || $_FILES[$fieldName]['error'] === UPLOAD_ERR_NO_FILE) {
+        $error = ucfirst(str_replace('_', ' ', $fieldName)) . ' document is required.';
+        return null;
+    }
+
+    $file = $_FILES[$fieldName];
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $error = 'Failed to upload the document. Please try again.';
+        return null;
+    }
+
+    $allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (!in_array($file['type'], $allowedTypes, true)) {
+        $error = 'Only PDF, JPG, and PNG files are accepted for uploaded documents.';
+        return null;
+    }
+
+    if ($file['size'] > 4 * 1024 * 1024) {
+        $error = 'Uploaded documents must be 4MB or smaller.';
+        return null;
+    }
+
+    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+    $safeName = $prefix . '_' . time() . '_' . bin2hex(random_bytes(8)) . '.' . $extension;
+    $uploadDir = __DIR__ . '/uploads/driver_docs';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
+    }
+
+    $targetPath = $uploadDir . '/' . $safeName;
+    if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
+        $error = 'Could not save the uploaded document. Please try again.';
+        return null;
+    }
+
+    return 'uploads/driver_docs/' . $safeName;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $license = $_POST['license'];
-    $phone = $_POST['phone'];
-    $vehicleType = $_POST['vehicle_type'];
-    $plate = $_POST['plate'];
-    $color = $_POST['color'];
+    $license = trim($_POST['license'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    $vehicleType = trim($_POST['vehicle_type'] ?? '');
+    $plate = trim($_POST['plate'] ?? '');
+    $color = trim($_POST['color'] ?? '');
+    $error = '';
 
-    // Insert driver info
-    $stmt = $conn->prepare(
-        "INSERT INTO drivers (user_id, license_number, phone)
-         VALUES (?, ?, ?)"
-    );
-    $stmt->bind_param("iss", $userId, $license, $phone);
-    $stmt->execute();
+    if ($license === '' || $phone === '' || $vehicleType === '' || $plate === '' || $color === '') {
+        $error = 'All fields are required to complete your driver profile.';
+    }
 
-    $driverId = $conn->insert_id;
+    $licenseFile = null;
+    $todaFile = null;
+    if ($error === '') {
+        $licenseFile = saveDriverDocument('license_doc', 'license', $error);
+    }
+    if ($error === '') {
+        $todaFile = saveDriverDocument('toda_id_doc', 'toda_id', $error);
+    }
 
-    // Insert vehicle info
-    $stmt = $conn->prepare(
-        "INSERT INTO vehicles (driver_id, vehicle_type, plate_number, color)
-         VALUES (?, ?, ?, ?)"
-    );
-    $stmt->bind_param("isss", $driverId, $vehicleType, $plate, $color);
-    $stmt->execute();
+    if ($error === '') {
+        $stmt = $conn->prepare(
+            "INSERT INTO drivers (user_id, license_number, phone, license_file, toda_id_file, approval_status)
+             VALUES (?, ?, ?, ?, ?, 'pending')"
+        );
+        $stmt->bind_param("issss", $userId, $license, $phone, $licenseFile, $todaFile);
+        $stmt->execute();
 
-    header("Location: driver.php");
-    exit;
+        $driverId = $conn->insert_id;
+
+        $stmt = $conn->prepare(
+            "INSERT INTO vehicles (driver_id, vehicle_type, plate_number, color)
+             VALUES (?, ?, ?, ?)"
+        );
+        $stmt->bind_param("isss", $driverId, $vehicleType, $plate, $color);
+        $stmt->execute();
+
+        header("Location: driver.php");
+        exit;
+    }
 }
 ?>
 
@@ -56,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TriWheel - Driver Details</title>
+    <title>TriWheel - Driver Verification</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
@@ -83,12 +137,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <h3><i class="fas fa-clipboard-list"></i> Complete Your Driver Profile</h3>
                 </div>
                 <div class="card-content">
-                    <form method="post" class="booking-form">
+                    <?php if ($error): ?>
+                        <div style="background:#f8d7da;color:#842029;padding:12px;border-radius:10px;margin-bottom:16px;">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <?php echo htmlspecialchars($error); ?>
+                        </div>
+                    <?php endif; ?>
+                    <form method="post" enctype="multipart/form-data" class="booking-form">
                         <div class="form-group">
                             <label for="license">
                                 <i class="fas fa-id-card"></i> License Number
                             </label>
                             <input type="text" id="license" name="license" placeholder="Enter license number" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="license_doc">
+                                <i class="fas fa-file-upload"></i> Upload License Document
+                            </label>
+                            <input type="file" id="license_doc" name="license_doc" accept=".pdf,image/png,image/jpeg" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="toda_id_doc">
+                                <i class="fas fa-id-badge"></i> Upload TODA ID
+                            </label>
+                            <input type="file" id="toda_id_doc" name="toda_id_doc" accept=".pdf,image/png,image/jpeg" required>
                         </div>
 
                         <div class="form-group">

@@ -68,6 +68,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errorMessage = 'Driver record not found.';
             }
         }
+    } elseif (isset($_POST['approve_driver'], $_POST['driver_id'])) {
+        $driverId = intval($_POST['driver_id']);
+        $approveStmt = $conn->prepare("UPDATE drivers SET approval_status = 'approved' WHERE id = ?");
+        $approveStmt->bind_param("i", $driverId);
+        $approveStmt->execute();
+        $approveStmt->close();
+        $successMessage = 'Driver has been approved and verified.';
+        $editingDriverId = $driverId;
+    } elseif (isset($_POST['reject_driver'], $_POST['driver_id'])) {
+        $driverId = intval($_POST['driver_id']);
+        $rejectStmt = $conn->prepare("UPDATE drivers SET approval_status = 'rejected' WHERE id = ?");
+        $rejectStmt->bind_param("i", $driverId);
+        $rejectStmt->execute();
+        $rejectStmt->close();
+        $successMessage = 'Driver approval has been rejected.';
+        $editingDriverId = $driverId;
     } elseif (isset($_POST['update_passenger'], $_POST['passenger_id'])) {
         $passengerId = intval($_POST['passenger_id']);
         $passengerName = trim($_POST['passenger_name'] ?? '');
@@ -126,7 +142,7 @@ $pendingCount = $pendingRequests['total'] ?? 0;
 $pendingRequestsStmt->close();
 
 $driversStmt = $conn->prepare(
-    "SELECT d.id AS driver_id, u.id AS driver_user_id, u.name AS driver_name, u.email AS driver_email, u.contact_number AS driver_contact, d.status, d.license_number, d.phone AS driver_phone, v.vehicle_type, v.plate_number, v.color
+    "SELECT d.id AS driver_id, u.id AS driver_user_id, u.name AS driver_name, u.email AS driver_email, u.contact_number AS driver_contact, d.status, d.approval_status, d.license_file, d.toda_id_file, d.license_number, d.phone AS driver_phone, v.vehicle_type, v.plate_number, v.color
      FROM drivers d
      JOIN users u ON u.id = d.user_id
      LEFT JOIN vehicles v ON v.driver_id = d.id
@@ -152,7 +168,7 @@ $editDriver = null;
 $editPassenger = null;
 if ($editingDriverId) {
     $editDriverStmt = $conn->prepare(
-        "SELECT d.id AS driver_id, u.id AS driver_user_id, u.name AS driver_name, u.email AS driver_email, u.contact_number AS driver_contact, d.phone AS driver_phone, d.license_number, v.plate_number
+        "SELECT d.id AS driver_id, u.id AS driver_user_id, u.name AS driver_name, u.email AS driver_email, u.contact_number AS driver_contact, d.phone AS driver_phone, d.license_number, d.approval_status, d.license_file, d.toda_id_file, v.plate_number
          FROM drivers d
          JOIN users u ON u.id = d.user_id
          LEFT JOIN vehicles v ON v.driver_id = d.id
@@ -277,6 +293,23 @@ $accountReady = isset($adminUser['role']) && $adminUser['role'] === 'admin';
                                     </label>
 
                                     <label style="display:block;font-size:0.9rem;color:#333;">
+                                        Approval Status
+                                        <input type="text" disabled value="<?php echo ucfirst(htmlspecialchars($editDriver['approval_status'] ?? 'pending')); ?>" style="width:100%;padding:10px;margin-top:6px;border:1px solid #ddd;border-radius:8px;background:#f8f9fa;">
+                                    </label>
+
+                                    <label style="display:block;font-size:0.9rem;color:#333;">
+                                        Document Links
+                                        <div style="margin-top:6px;">
+                                            <?php if (!empty($editDriver['license_file'])): ?>
+                                                <a href="<?php echo htmlspecialchars($editDriver['license_file']); ?>" target="_blank" style="display:inline-block;margin-right:8px;">License</a>
+                                            <?php endif; ?>
+                                            <?php if (!empty($editDriver['toda_id_file'])): ?>
+                                                <a href="<?php echo htmlspecialchars($editDriver['toda_id_file']); ?>" target="_blank">TODA</a>
+                                            <?php endif; ?>
+                                        </div>
+                                    </label>
+
+                                    <label style="display:block;font-size:0.9rem;color:#333;">
                                         Plate
                                         <input type="text" name="driver_plate" value="<?php echo htmlspecialchars($editDriver['plate_number'] ?? ''); ?>" style="width:100%;padding:10px;margin-top:6px;border:1px solid #ddd;border-radius:8px;">
                                     </label>
@@ -297,6 +330,8 @@ $accountReady = isset($adminUser['role']) && $adminUser['role'] === 'admin';
                                     <th style="padding:10px;border-bottom:1px solid #ddd;text-align:left;">Phone</th>
                                     <th style="padding:10px;border-bottom:1px solid #ddd;text-align:left;">Status</th>
                                     <th style="padding:10px;border-bottom:1px solid #ddd;text-align:left;">License</th>
+                                    <th style="padding:10px;border-bottom:1px solid #ddd;text-align:left;">Approval</th>
+                                    <th style="padding:10px;border-bottom:1px solid #ddd;text-align:left;">Docs</th>
                                     <th style="padding:10px;border-bottom:1px solid #ddd;text-align:left;">Vehicle</th>
                                     <th style="padding:10px;border-bottom:1px solid #ddd;text-align:left;">Plate</th>
                                     <th style="padding:10px;border-bottom:1px solid #ddd;text-align:left;">Action</th>
@@ -324,6 +359,20 @@ $accountReady = isset($adminUser['role']) && $adminUser['role'] === 'admin';
                                             <td style="padding:10px;border-bottom:1px solid #f0f0f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">
                                                 <?php echo htmlspecialchars($driver['license_number']); ?>
                                             </td>
+                                            <td style="padding:10px;border-bottom:1px solid #f0f0f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px;color:<?php echo ($driver['approval_status'] === 'approved' ? '#198754' : ($driver['approval_status'] === 'rejected' ? '#dc3545' : '#6c757d')); ?>;font-weight:700;">
+                                                <?php echo ucfirst(htmlspecialchars($driver['approval_status'] ?? 'pending')); ?>
+                                            </td>
+                                            <td style="padding:10px;border-bottom:1px solid #f0f0f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;">
+                                                <?php if (!empty($driver['license_file'])): ?>
+                                                    <a href="<?php echo htmlspecialchars($driver['license_file']); ?>" target="_blank">License</a>
+                                                <?php endif; ?>
+                                                <?php if (!empty($driver['license_file']) && !empty($driver['toda_id_file'])): ?>
+                                                    <span> | </span>
+                                                <?php endif; ?>
+                                                <?php if (!empty($driver['toda_id_file'])): ?>
+                                                    <a href="<?php echo htmlspecialchars($driver['toda_id_file']); ?>" target="_blank">TODA</a>
+                                                <?php endif; ?>
+                                            </td>
                                             <td style="padding:10px;border-bottom:1px solid #f0f0f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">
                                                 <?php echo htmlspecialchars($driver['vehicle_type'] ?? '—'); ?>
                                             </td>
@@ -331,7 +380,21 @@ $accountReady = isset($adminUser['role']) && $adminUser['role'] === 'admin';
                                                 <?php echo htmlspecialchars($driver['plate_number'] ?? '—'); ?>
                                             </td>
                                             <td style="padding:10px;border-bottom:1px solid #f0f0f0;">
-                                                <a href="admin_status.php?edit_driver=<?php echo intval($driver['driver_id']); ?>" class="btn-secondary" style="padding:6px 10px;font-size:0.85rem;">Edit</a>
+                                                <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+                                                    <a href="admin_status.php?edit_driver=<?php echo intval($driver['driver_id']); ?>" class="btn-secondary" style="padding:6px 10px;font-size:0.85rem;">Edit</a>
+                                                    <?php if (($driver['approval_status'] ?? 'pending') !== 'approved'): ?>
+                                                        <form method="post" style="display:inline;">
+                                                            <input type="hidden" name="driver_id" value="<?php echo intval($driver['driver_id']); ?>">
+                                                            <button type="submit" name="approve_driver" class="btn-primary" style="padding:6px 10px;font-size:0.85rem;">Approve</button>
+                                                        </form>
+                                                        <form method="post" style="display:inline;">
+                                                            <input type="hidden" name="driver_id" value="<?php echo intval($driver['driver_id']); ?>">
+                                                            <button type="submit" name="reject_driver" class="btn-danger" style="padding:6px 10px;font-size:0.85rem;">Reject</button>
+                                                        </form>
+                                                    <?php else: ?>
+                                                        <span style="font-size:0.8rem;color:#198754;font-weight:700;">Verified</span>
+                                                    <?php endif; ?>
+                                                </div>
                                             </td>
                                         </tr>
                                     <?php endwhile; ?>

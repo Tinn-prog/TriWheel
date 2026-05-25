@@ -321,6 +321,7 @@ $recentStmt->close();
                                 <tr>
                                     <th>Passenger</th>
                                     <th>Pickup</th>
+                                    <th>Dropoff</th>
                                     <th>Time</th>
                                 </tr>
                             </thead>
@@ -329,6 +330,7 @@ $recentStmt->close();
                                     <tr>
                                         <td><?php echo htmlspecialchars($row['passenger_name'] ?? '—'); ?></td>
                                         <td><?php echo htmlspecialchars(substr($row['pickup_address'] ?? '—', 0, 30)); ?><?php echo strlen($row['pickup_address'] ?? '') > 30 ? '...' : ''; ?></td>
+                                        <td><?php echo htmlspecialchars(substr($row['dropoff_address'] ?? '—', 0, 30)); ?><?php echo strlen($row['dropoff_address'] ?? '') > 30 ? '...' : ''; ?></td>
                                         <td><?php echo htmlspecialchars(date('h:i A', strtotime($row['created_at']))); ?></td>
                                     </tr>
                                 <?php endforeach; ?>

@@ -5,6 +5,7 @@ require 'db.php';
 ini_set('display_errors', '0');
 ini_set('display_startup_errors', '0');
 error_reporting(0);
+$statusUpdateError = '';
 
 /* ===== AUTH CHECK ===== */
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'driver') {
@@ -18,14 +19,25 @@ $rideCancelled = false;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['status'])) {
     $status = $_POST['status'];
 
-    $update = $conn->prepare(
-        "UPDATE drivers SET status = ? WHERE user_id = ?"
-    );
-    $update->bind_param("si", $status, $_SESSION['user_id']);
-    $update->execute();
+    $approvalStmt = $conn->prepare("SELECT approval_status FROM drivers WHERE user_id = ?");
+    $approvalStmt->bind_param("i", $_SESSION['user_id']);
+    $approvalStmt->execute();
+    $approvalStatusRow = $approvalStmt->get_result()->fetch_assoc();
+    $approvalStmt->close();
 
-    header("Location: driver.php");
-    exit;
+    $driverApprovalStatus = $approvalStatusRow['approval_status'] ?? 'pending';
+    if ($driverApprovalStatus !== 'approved') {
+        $statusUpdateError = 'Your account must be approved by an admin before you can go online.';
+    } else {
+        $update = $conn->prepare(
+            "UPDATE drivers SET status = ? WHERE user_id = ?"
+        );
+        $update->bind_param("si", $status, $_SESSION['user_id']);
+        $update->execute();
+
+        header("Location: driver.php");
+        exit;
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['clear_history'])) {
@@ -121,7 +133,7 @@ function calculateDistanceKm($lat1, $lng1, $lat2, $lng2) {
 }
 
 function calculateFare($distanceKm) {
-    $baseFare = 40.00;
+    $baseFare = 10.00;
     $perKmRate = 12.00;
     $fare = $baseFare + ($distanceKm * $perKmRate);
     return round(max($fare, $baseFare), 2);
@@ -141,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_ride'])) {
         $distanceKm = calculateDistanceKm($distanceData['pickup_lat'], $distanceData['pickup_lng'], $distanceData['dropoff_lat'], $distanceData['dropoff_lng']);
         $fare = calculateFare($distanceKm);
     } else {
-        $fare = 40.00;
+        $fare = 10.00;
     }
     
     $completeStmt = $conn->prepare("
@@ -166,6 +178,7 @@ $stmt = $conn->prepare("
         d.license_number,
         d.phone,
         d.status,
+        d.approval_status,
         v.vehicle_type,
         v.plate_number,
         v.color
@@ -177,6 +190,8 @@ $stmt->bind_param("i", $_SESSION['user_id']);
 $stmt->execute();
 $result = $stmt->get_result();
 $driver = $result->fetch_assoc();
+$driverApprovalStatus = $driver['approval_status'] ?? 'pending';
+$driverNotApproved = $driverApprovalStatus !== 'approved';
 
 /* ===== FORCE DRIVER DETAILS ===== */
 if (!$driver) {
@@ -345,6 +360,17 @@ function renderRatingStars($rating) {
                 <h1><i class="fas fa-id-card"></i> Driver Dashboard</h1>
                 <p>Manage your rides and availability</p>
             </div>
+            <?php if ($driverNotApproved): ?>
+                <div style="margin-bottom:20px;padding:16px;border-radius:12px;background:#fff3cd;color:#664d03;border:1px solid #ffecb5;">
+                    <strong>Verification status:</strong>
+                    <?php echo ucfirst(htmlspecialchars($driverApprovalStatus)); ?>.
+                    <?php if ($driverApprovalStatus === 'pending'): ?>
+                        Your profile is under review by an admin. You will be able to go online once approved.
+                    <?php else: ?>
+                        Your account has been rejected. Please contact support or resubmit your driver details.
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
 
             <div class="dashboard-grid">
                 <!-- Driver Status -->
@@ -363,11 +389,17 @@ function renderRatingStars($rating) {
                             </p>
                         </div>
 
+                        <?php if (!empty($statusUpdateError)): ?>
+                            <div style="background:#f8d7da;color:#842029;padding:12px;border-radius:10px;margin-bottom:12px;">
+                                <?php echo htmlspecialchars($statusUpdateError); ?>
+                            </div>
+                        <?php endif; ?>
+
                         <form method="post" class="status-form">
                             <label for="status">
                                 <i class="fas fa-toggle-on"></i> Change Status
                             </label>
-                            <select id="status" name="status">
+                            <select id="status" name="status" <?php echo $driverNotApproved ? 'disabled' : ''; ?>>
                                 <option value="online" <?php echo $driver['status'] === 'online' ? 'selected' : ''; ?>>
                                     🟢 Online (Available for rides)
                                 </option>
@@ -375,7 +407,7 @@ function renderRatingStars($rating) {
                                     🔴 Offline (Not available)
                                 </option>
                             </select>
-                            <button type="submit" class="btn-primary full-width">
+                            <button type="submit" class="btn-primary full-width" <?php echo $driverNotApproved ? 'disabled' : ''; ?>>
                                 <i class="fas fa-save"></i> Update Status
                             </button>
                         </form>
@@ -421,6 +453,10 @@ function renderRatingStars($rating) {
                                     <div class="info-item">
                                         <span class="label">Driver Rating:</span>
                                         <span class="value"><?php echo $ratingSummary && $ratingSummary['total_ratings'] ? round($ratingSummary['avg_rating_value'], 1) . ' / 5 (' . intval($ratingSummary['total_ratings']) . ' ratings)' : 'No ratings yet'; ?></span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">Verification:</span>
+                                        <span class="value"><?php echo ucfirst(htmlspecialchars($driverApprovalStatus)); ?></span>
                                     </div>
                                 </div>
                             </div>

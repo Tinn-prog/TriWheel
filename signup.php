@@ -270,7 +270,7 @@ $selectedRole = $_GET['role'] ?? '';
                                 </div>
                                 <div class="role-info">
                                     <h4>Driver</h4>
-                                    <p>Provide rides</p>
+                                    <p>Provide rides — subject to admin verification</p>
                                 </div>
                                 <input type="radio" name="role" value="driver" 
                                        <?php echo (($selectedRole === 'driver' || $post_role === 'driver') ? 'checked' : ''); ?> required>

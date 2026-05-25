@@ -140,7 +140,7 @@ function calculateDistanceKm($lat1, $lng1, $lat2, $lng2) {
 }
 
 function calculateFare($distanceKm) {
-    $baseFare = 40.00;
+    $baseFare = 10.00;
     $perKmRate = 12.00;
     $fare = $baseFare + ($distanceKm * $perKmRate);
     return round(max($fare, $baseFare), 2);
@@ -175,7 +175,7 @@ if ($currentRide) {
         $distanceKm = calculateDistanceKm($currentRide['pickup_lat'], $currentRide['pickup_lng'], $currentRide['dropoff_lat'], $currentRide['dropoff_lng']);
         $currentRideFare = calculateFare($distanceKm);
     } else {
-        $currentRideFare = 40.00;
+        $currentRideFare = 10.00;
     }
 }
 
@@ -336,7 +336,7 @@ $history = $historyStmt->get_result();
                                     <div class="detail-row">
                                         <i class="fas fa-money-bill-wave"></i>
                                         <div>
-                                            <strong>Estimated Fare:</strong> <?php echo '₱' . number_format($currentRideFare ?? 40.00, 2); ?>
+                                            <strong>Estimated Fare:</strong> <?php echo '₱' . number_format($currentRideFare ?? 10.00, 2); ?>
                                         </div>
                                     </div>
                                     
