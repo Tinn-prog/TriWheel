@@ -505,7 +505,7 @@ function renderRatingStars($rating) {
                                     <div class="detail-row">
                                         <i class="fas fa-money-bill-wave"></i>
                                         <div>
-                                            <strong>Estimated Fare:</strong> ₱<?php echo number_format($currentRideAutoFare !== null ? $currentRideAutoFare : 40.00, 2); ?>
+                                            <strong>Estimated Fare:</strong> ₱<?php echo number_format($currentRideAutoFare !== null ? $currentRideAutoFare : 10.00, 2); ?>
                                         </div>
                                     </div>
                                 </div>
@@ -542,7 +542,7 @@ function renderRatingStars($rating) {
                                         <?php endif; ?>
                                         <div class="fare-input">
                                             <label for="fare">Fare Amount (₱):</label>
-                                            <input type="number" id="fare" step="0.01" min="0" value="<?php echo $currentRideAutoFare !== null ? number_format($currentRideAutoFare, 2) : '40.00'; ?>" readonly>
+                                            <input type="number" id="fare" step="0.01" min="0" value="<?php echo $currentRideAutoFare !== null ? number_format($currentRideAutoFare, 2) : '10.00'; ?>" readonly>
                                         </div>
                                         <button type="submit" class="btn-success full-width">
                                             <i class="fas fa-check"></i> Complete Ride
@@ -605,7 +605,7 @@ function renderRatingStars($rating) {
                                                                 $requestDistance = calculateDistanceKm($request['pickup_lat'], $request['pickup_lng'], $request['dropoff_lat'], $request['dropoff_lng']);
                                                                 echo '₱' . number_format(calculateFare($requestDistance), 2);
                                                             } else {
-                                                                echo '₱40.00';
+                                                                echo '₱10.00';
                                                             }
                                                         ?>
                                                     </span>
