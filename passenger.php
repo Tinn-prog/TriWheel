@@ -1,10 +1,14 @@
 <?php
-session_start();
+require 'auth.php';
 require 'db.php';
+require 'system_helpers.php';
 
 ini_set('display_errors', '0');
 ini_set('display_startup_errors', '0');
 error_reporting(0);
+header('Content-Type: text/html; charset=utf-8');
+triwheel_ensure_schema($conn);
+require_valid_csrf();
 
 /* ===== AUTH CHECK ===== */
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'passenger') {
@@ -28,22 +32,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_ride'])) {
     if ($activeResult->num_rows > 0) {
         $rideAlreadyActive = true;
     } else {
-        $pickup = $_POST['pickup'];
-        $dropoff = $_POST['dropoff'];
-        $rideType = $_POST['ride_type'];
-        
-        $pickupLat = 14.5995;
-        $pickupLng = 120.9842;
-        $dropoffLat = 14.6091;
-        $dropoffLng = 121.0223;
+        $pickup = trim($_POST['pickup'] ?? '');
+        $dropoff = trim($_POST['dropoff'] ?? '');
+        // Accept form values 'tricycle', 'motorcycle', 'car' as valid ride types
+        $allowedRideTypes = ['tricycle', 'motorcycle', 'car'];
+        $rideTypeRaw = trim($_POST['ride_type'] ?? '');
+        $rideType = strtolower(preg_replace('/[^a-z0-9_-]+/i', '', $rideTypeRaw));
+        if (!in_array($rideType, $allowedRideTypes, true)) {
+            $rideType = 'standard';
+        }
+        $terminal = triwheel_detect_terminal($pickup) ?? triwheel_detect_terminal($dropoff);
+
+        $pickupLat = filter_var($_POST['pickup_lat'] ?? null, FILTER_VALIDATE_FLOAT);
+        $pickupLng = filter_var($_POST['pickup_lng'] ?? null, FILTER_VALIDATE_FLOAT);
+        $dropoffLat = filter_var($_POST['dropoff_lat'] ?? null, FILTER_VALIDATE_FLOAT);
+        $dropoffLng = filter_var($_POST['dropoff_lng'] ?? null, FILTER_VALIDATE_FLOAT);
+
+        if ($pickupLat === false || $pickupLng === false) {
+            [$pickupLat, $pickupLng] = triwheel_location_coordinates($pickup);
+        }
+        if ($dropoffLat === false || $dropoffLng === false) {
+            [$dropoffLat, $dropoffLng] = triwheel_location_coordinates($dropoff);
+        }
         
         $stmt = $conn->prepare("
             INSERT INTO rides (passenger_id, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, 
-                              pickup_address, dropoff_address, ride_type, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'requested', NOW())
+                              pickup_address, dropoff_address, ride_type, terminal, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', NOW())
         ");
-        $stmt->bind_param("iddddsss", $_SESSION['user_id'], $pickupLat, $pickupLng, 
-                         $dropoffLat, $dropoffLng, $pickup, $dropoff, $rideType);
+        $stmt->bind_param("iddddssss", $_SESSION['user_id'], $pickupLat, $pickupLng, 
+                         $dropoffLat, $dropoffLng, $pickup, $dropoff, $rideType, $terminal);
         
         if ($stmt->execute()) {
             header("Location: passenger.php?ride_requested=1");
@@ -70,29 +88,46 @@ if (isset($_GET['ride_cancelled']) && $_GET['ride_cancelled'] === '1') {
     $rideCanceled = true;
 }
 
+$feedbackSuccess = '';
+$feedbackError = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rate_driver'])) {
     $rideId = intval($_POST['ride_id']);
     $rating = $_POST['rating'] ?? '';
-    $allowedRatings = ['good', 'satisfied', 'neutral', 'dissatisfied', 'bad'];
+    $feedback = trim($_POST['passenger_feedback'] ?? '');
+    $allowedRatings = ['good', 'satisfied', 'neutral', 'dissatisfied', 'very_dissatisfied'];
 
     if (!in_array($rating, $allowedRatings, true)) {
-        $error = "Please select a valid rating.";
+        $feedbackError = "Please select a valid rating.";
     } else {
-        $rateStmt = $conn->prepare(
-            "UPDATE rides SET rating = ? WHERE id = ? AND passenger_id = ? AND status = 'completed' AND rating IS NULL"
+        // Check ride belongs to this passenger, is completed, and not yet rated by passenger
+        $checkStmt = $conn->prepare(
+            "SELECT id FROM rides WHERE id = ? AND passenger_id = ? AND status = 'completed' AND passenger_rated = 0"
         );
-        $rateStmt->bind_param("sii", $rating, $rideId, $_SESSION['user_id']);
-        if ($rateStmt->execute() && $rateStmt->affected_rows > 0) {
-            $success = "Your rating has been recorded. Thank you for your feedback!";
+        $checkStmt->bind_param("ii", $rideId, $_SESSION['user_id']);
+        $checkStmt->execute();
+        $checkResult = $checkStmt->get_result();
+        $checkStmt->close();
+
+        if ($checkResult->num_rows === 0) {
+            $feedbackError = "Unable to submit feedback. The ride may already be rated or not yet completed.";
         } else {
-            $error = "Unable to submit rating. Please make sure the ride is completed and not already rated.";
+            $rateStmt = $conn->prepare(
+                "UPDATE rides SET rating = ?, passenger_feedback = ?, passenger_rated = 1 WHERE id = ? AND passenger_id = ?"
+            );
+            $rateStmt->bind_param("ssii", $rating, $feedback, $rideId, $_SESSION['user_id']);
+            if ($rateStmt->execute() && $rateStmt->affected_rows > 0) {
+                $feedbackSuccess = "Thank you! Your feedback has been submitted successfully.";
+            } else {
+                $feedbackError = "Unable to submit feedback. Please try again.";
+            }
+            $rateStmt->close();
         }
-        $rateStmt->close();
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['clear_history'])) {
-    $clearStmt = $conn->prepare("DELETE FROM rides WHERE passenger_id = ? AND status IN ('completed', 'cancelled')");
+    $clearStmt = $conn->prepare("UPDATE rides SET hidden_for_passenger = 1 WHERE passenger_id = ? AND status IN ('completed', 'cancelled')");
     $clearStmt->bind_param("i", $_SESSION['user_id']);
     $clearStmt->execute();
     header("Location: passenger.php");
@@ -111,39 +146,17 @@ function formatRideType($type) {
 
 function renderRatingStars($rating) {
     $map = [
-        'good' => 5,
-        'satisfied' => 4,
-        'neutral' => 3,
-        'dissatisfied' => 2,
-        'bad' => 1,
+        'good'              => 5,
+        'satisfied'         => 4,
+        'neutral'           => 3,
+        'dissatisfied'      => 2,
+        'very_dissatisfied' => 1,
+        'bad'               => 1,
     ];
     $count = $map[$rating] ?? 0;
     $filled = str_repeat('★', $count);
     $empty = str_repeat('☆', 5 - $count);
     return $filled . $empty;
-}
-
-function calculateDistanceKm($lat1, $lng1, $lat2, $lng2) {
-    $earthRadius = 6371;
-    $latFrom = deg2rad($lat1);
-    $lonFrom = deg2rad($lng1);
-    $latTo = deg2rad($lat2);
-    $lonTo = deg2rad($lng2);
-
-    $latDelta = $latTo - $latFrom;
-    $lonDelta = $lonTo - $lonFrom;
-
-    $a = sin($latDelta / 2) * sin($latDelta / 2) + cos($latFrom) * cos($latTo) * sin($lonDelta / 2) * sin($lonDelta / 2);
-    $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-
-    return $earthRadius * $c;
-}
-
-function calculateFare($distanceKm) {
-    $baseFare = 10.00;
-    $perKmRate = 12.00;
-    $fare = $baseFare + ($distanceKm * $perKmRate);
-    return round(max($fare, $baseFare), 2);
 }
 
 /* ===== CHECK FOR CURRENT RIDE ===== */
@@ -196,7 +209,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'ride_status') {
 $rideCompletedNotification = false;
 if (!$currentRide) {
     $completedRideStmt = $conn->prepare(
-        "SELECT id FROM rides WHERE passenger_id = ? AND status = 'completed' AND rating IS NULL AND created_at >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) ORDER BY created_at DESC LIMIT 1"
+        "SELECT id FROM rides WHERE passenger_id = ? AND status = 'completed' AND passenger_rated = 0 AND created_at >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) ORDER BY created_at DESC LIMIT 1"
     );
     $completedRideStmt->bind_param("i", $_SESSION['user_id']);
     $completedRideStmt->execute();
@@ -208,7 +221,7 @@ if (!$currentRide) {
 }
 
 /* ===== FETCH RIDE HISTORY ===== */
-$historyStmt = $conn->prepare("\n    SELECT r.*, d.phone as driver_phone, du.name as driver_name, v.vehicle_type, v.plate_number, v.color\n    FROM rides r\n    LEFT JOIN drivers d ON r.driver_id = d.id\n    LEFT JOIN users du ON d.user_id = du.id\n    LEFT JOIN vehicles v ON d.id = v.driver_id\n    WHERE r.passenger_id = ?\n    ORDER BY r.created_at DESC\n    LIMIT 10\n");
+$historyStmt = $conn->prepare("\n    SELECT r.*, d.phone as driver_phone, du.name as driver_name, v.vehicle_type, v.plate_number, v.color\n    FROM rides r\n    LEFT JOIN drivers d ON r.driver_id = d.id\n    LEFT JOIN users du ON d.user_id = du.id\n    LEFT JOIN vehicles v ON d.id = v.driver_id\n    WHERE r.passenger_id = ? AND r.hidden_for_passenger = 0\n    ORDER BY r.created_at DESC\n    LIMIT 10\n");
 $historyStmt->bind_param("i", $_SESSION['user_id']);
 $historyStmt->execute();
 $history = $historyStmt->get_result();
@@ -231,62 +244,95 @@ $history = $historyStmt->get_result();
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=fitcards4">
     
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .star-rating {
+            display: inline-flex;
+            flex-direction: row-reverse;
+            gap: 8px;
+            align-items: center;
+            background: #fff;
+            border-radius: 8px;
+            padding: 8px 12px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+            user-select: none;
+        }
+        .star-rating input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .star-rating label {
+            cursor: pointer;
+            line-height: 1;
+            font-size: 1.65rem;
+            color: #ffc107;
+            transition: transform 0.15s ease, color 0.15s ease;
+        }
+        .star-rating label::before { content: "\2606"; }
+        .star-rating label:hover::before,
+        .star-rating label:hover ~ label::before,
+        .star-rating input:checked ~ label::before { content: "\2605"; }
+        .star-rating label:hover { transform: translateY(-1px) scale(1.08); }
+        .feedback-form textarea:focus { outline: none; }
+        .rating-options { user-select: none; }
+        .feedback-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+        .feedback-modal-overlay.active { display: flex; }
+        .feedback-modal {
+            background: white;
+            border-radius: 18px;
+            padding: 32px 28px;
+            max-width: 440px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            animation: slideIn 0.3s ease;
+            position: relative;
+        }
+        .feedback-modal h3 {
+            font-size: 1.2rem;
+            margin-bottom: 6px;
+            color: var(--dark);
+        }
+        .feedback-modal .modal-close {
+            position: absolute;
+            top: 16px; right: 18px;
+            background: none; border: none;
+            font-size: 1.3rem; cursor: pointer;
+            color: var(--gray);
+        }
+        .feedback-modal .modal-close:hover { color: var(--dark); }
+        .modal-ride-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 18px;
+            font-size: 0.88em;
+            color: var(--gray);
+        }
+        @keyframes slideIn {
+            from { opacity:0; transform:translateY(20px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+    </style>
 </head>
 
-<body>
-    <!-- Navigation -->
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="logo logo-header">
-                <img src="logo-header.png" alt="TriWheel Logo" class="logo-img">
-                <span class="logo-text">TriWheel</span>
-            </div>
-            <div class="hamburger" onclick="toggleSidebar()">
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-            <div class="nav-links desktop-only">
-                <span class="user-greeting">Welcome, <strong><?php echo htmlspecialchars($_SESSION['user_name'] ?? 'Passenger'); ?></strong></span>
-                <a href="settings.php" class="btn-secondary" style="padding: 8px 16px; font-size: 0.9rem; margin-right: 10px;">
-                    <i class="fas fa-cog"></i> Settings
-                </a>
-                <form action="logout.php" method="post" style="display: inline;">
-                    <button type="submit" class="btn-secondary" style="padding: 8px 16px; font-size: 0.9rem;">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </button>
-                </form>
-            </div>
-            <div class="sidebar" id="sidebar">
-                <div class="sidebar-header">
-                    <span class="close-btn" onclick="toggleSidebar()">&times;</span>
-                </div>
-                <div class="sidebar-content">
-                    <div class="sidebar-logo">
-                        <img src="logo.png" alt="TriWheel Logo" class="logo-img">
-                        <span class="logo-text">TriWheel</span>
-                    </div>
-                    <span class="user-greeting">Welcome, <strong><?php echo htmlspecialchars($_SESSION['user_name'] ?? 'Passenger'); ?></strong></span>
-                    <a href="settings.php" class="sidebar-link">
-                        <i class="fas fa-cog"></i> Settings
-                    </a>
-                    <form action="logout.php" method="post">
-                        <button type="submit" class="sidebar-link logout-btn">
-                            <i class="fas fa-sign-out-alt"></i> Logout
-                        </button>
-                    </form>
-                </div>
-            </div>
-            <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
-        </div>
-    </nav>
+<body class="app-dashboard passenger-dashboard app-passenger">
+    <!-- Persistent Sidebar Navigation -->
+    <?php require 'navbar.php'; ?>
 
     <!-- Main Content -->
-    <main class="dashboard-container">
+    <main class="dashboard-container" id="dashboard-top">
         <div class="container">
             <!-- Header Section -->
             <div class="dashboard-header">
@@ -296,15 +342,15 @@ $history = $historyStmt->get_result();
 
             <div class="dashboard-grid">
                 <!-- Current Ride Status -->
-                <div class="dashboard-card status-card">
+                <div class="dashboard-card status-card" id="current-ride">
                     <div class="card-header">
                         <h3><i class="fas fa-route"></i> Current Ride Status</h3>
                     </div>
                     <div class="card-content">
                         <?php if ($rideCompletedNotification): ?>
-                            <div class="success-message">
+                            <div class="success-message" style="cursor:pointer;" onclick="document.getElementById('feedbackModal').classList.add('active')">
                                 <i class="fas fa-check-circle"></i>
-                                Your ride has been completed. Thank you for riding with TriWheel!
+                                Your ride has been completed! <strong>Tap here to rate your driver.</strong>
                             </div>
                         <?php endif; ?>
                         <?php if ($currentRide): ?>
@@ -407,7 +453,7 @@ $history = $historyStmt->get_result();
                 </div>
 
                 <!-- Book Ride Form -->
-                <div class="dashboard-card booking-card">
+                <div class="dashboard-card booking-card" id="book-ride">
                     <div class="card-header">
                         <h3><i class="fas fa-plus-circle"></i> Book a Ride</h3>
                     </div>
@@ -439,14 +485,59 @@ $history = $historyStmt->get_result();
                                     <label for="pickup">
                                         <i class="fas fa-map-marker-alt"></i> Pickup Location
                                     </label>
-                                    <input type="text" id="pickup" name="pickup" placeholder="Enter pickup address" required>
+                                    <input type="text" id="pickup" name="pickup" list="service-locations" placeholder="Enter pickup address" required>
+                                    <input type="hidden" id="pickup_lat" name="pickup_lat">
+                                    <input type="hidden" id="pickup_lng" name="pickup_lng">
                                 </div>
 
                                 <div class="form-group">
                                     <label for="dropoff">
                                         <i class="fas fa-flag-checkered"></i> Drop-off Location
                                     </label>
-                                    <input type="text" id="dropoff" name="dropoff" placeholder="Enter destination" required>
+                                    <input type="text" id="dropoff" name="dropoff" list="service-locations" placeholder="Enter destination" required>
+                                    <input type="hidden" id="dropoff_lat" name="dropoff_lat">
+                                    <input type="hidden" id="dropoff_lng" name="dropoff_lng">
+                                </div>
+
+                                <datalist id="service-locations">
+                                    <option value="Itech Building">
+                                    <option value="Public Market">
+                                    <option value="Tricycle Terminal">
+                                    <option value="Pedicab Terminal">
+                                    <option value="PUP Main">
+                                    <option value="Cea Building">
+                                    <option value="Barangay Hall">
+                                    <option value="Church">
+                                    <option value="Plaza">
+                                </datalist>
+
+                                <div id="farePreview" style="display:none;background:#f8f9fa;border:1px solid #e9ecef;border-radius:12px;padding:14px;margin-bottom:14px;">
+                                    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+                                        <div>
+                                            <strong style="display:block;color:var(--dark);">Estimated Fare</strong>
+                                            <span style="font-size:0.86rem;color:var(--gray);">Based on saved local coordinates</span>
+                                        </div>
+                                        <div style="text-align:right;">
+                                            <strong id="farePreviewAmount" style="font-size:1.35rem;color:var(--primary);">₱0.00</strong>
+                                            <div id="farePreviewDistance" style="font-size:0.82rem;color:var(--gray);">0.00 km</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style="background:#fff7f3;border:1px solid rgba(255,107,53,0.25);border-radius:12px;padding:12px;margin-bottom:4px;">
+                                    <strong style="display:block;color:var(--dark);font-size:0.95rem;">Map Location Picker</strong>
+                                    <span id="mapPickerStatus" style="display:block;color:var(--gray);font-size:0.86rem;margin:4px 0 10px;">Click Pickup, then tap the map. Click Drop-off, then tap the map again.</span>
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <button type="button" id="selectPickupBtn" class="btn-secondary small" style="padding:8px 12px;">
+                                            <i class="fas fa-map-marker-alt"></i> Pickup
+                                        </button>
+                                        <button type="button" id="selectDropoffBtn" class="btn-secondary small" style="padding:8px 12px;">
+                                            <i class="fas fa-flag-checkered"></i> Drop-off
+                                        </button>
+                                        <button type="button" id="clearMapSelectionBtn" class="btn-secondary small" style="padding:8px 12px;">
+                                            <i class="fas fa-eraser"></i> Clear Pins
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div class="form-group">
@@ -474,7 +565,7 @@ $history = $historyStmt->get_result();
                 </div>
 
                 <!-- Live Map -->
-                <div class="dashboard-card map-card">
+                <div class="dashboard-card map-card" id="live-map">
                     <div class="card-header">
                         <h3><i class="fas fa-map-marked-alt"></i> Live Map</h3>
                     </div>
@@ -485,109 +576,77 @@ $history = $historyStmt->get_result();
                                 <i class="fas fa-map-marker-alt" style="color: green;"></i>
                                 <span>Your Location</span>
                             </div>
+                            <div class="legend-item">
+                                <i class="fas fa-map-marker-alt" style="color: #1d7afc;"></i>
+                                <span>Pickup Pin</span>
+                            </div>
+                            <div class="legend-item">
+                                <i class="fas fa-map-marker-alt" style="color: #dc3545;"></i>
+                                <span>Drop-off Pin</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Ride History -->
-                <div class="dashboard-card history-card">
+                <!-- Feedback Report -->
+                <div class="dashboard-card history-card" id="feedback-report">
                     <div class="card-header">
-                        <h3><i class="fas fa-history"></i> Recent Rides</h3>
-                        <form method="POST" style="display: inline;">
-                            <button type="submit" name="clear_history" class="btn-secondary small" onclick="return confirm('Are you sure you want to clear completed and cancelled rides from history?')">
-                                <i class="fas fa-trash"></i> Clear History
-                            </button>
-                        </form>
+                        <h3><i class="fas fa-comments"></i> Feedback Report</h3>
                     </div>
                     <div class="card-content">
+                        <p style="margin-top:0;color:var(--gray);font-size:0.9rem;">Review your recent ride feedback and comments.</p>
                         <?php $historyCount = $history ? $history->num_rows : 0; ?>
                         <?php if ($historyCount > 0): ?>
                             <div class="history-wrapper">
-                                <div class="ride-history">
-                                    <?php while ($ride = $history->fetch_assoc()): ?>
-                                    <div class="history-item clickable">
-                                        <div class="history-header">
-                                            <span class="ride-date"><?php echo date('M d, h:i A', strtotime($ride['created_at'])); ?></span>
-                                            <span class="ride-status <?php echo $ride['status']; ?>">
-                                                <?php echo ucfirst($ride['status']); ?>
-                                            </span>
-                                        </div>
-                                        <div class="history-details">
-                                            <div class="detail-row">
-                                                <i class="fas fa-map-marker-alt"></i>
-                                                <span><?php echo htmlspecialchars(substr($ride['pickup_address'], 0, 30)); ?>...</span>
-                                            </div>
-                                            <div class="detail-row">
-                                                <i class="fas fa-arrow-right"></i>
-                                                <span><?php echo htmlspecialchars(substr($ride['dropoff_address'], 0, 30)); ?>...</span>
-                                            </div>
-                                            <div class="fare-amount">
-                                                <strong><?php echo $ride['fare'] ? '₱' . number_format($ride['fare'], 2) : '--'; ?></strong>
-                                            </div>
-                                        </div>
-                                        <div class="history-expanded">
-                                            <div class="detail-row">
-                                                <i class="fas fa-motorcycle"></i>
-                                                <strong>Ride Type:</strong>
-                                                <span><?php echo htmlspecialchars(formatRideType($ride['ride_type'])); ?></span>
-                                            </div>
-                                                <div class="detail-row">
-                                                <i class="fas fa-user"></i>
-                                                <strong>Driver:</strong>
-                                                <span><?php echo htmlspecialchars($ride['driver_name'] ?? 'N/A'); ?></span>
-                                            </div>
-                                            <div class="detail-row">
-                                                <i class="fas fa-phone"></i>
-                                                <strong>Driver Phone:</strong>
-                                                <span><?php echo htmlspecialchars($ride['driver_phone'] ?? '--'); ?></span>
-                                            </div>
-                                            <div class="detail-row">
-                                                <i class="fas fa-map-marker-alt"></i>
-                                                <strong>Pickup:</strong>
-                                                <span><?php echo htmlspecialchars($ride['pickup_address']); ?></span>
-                                            </div>
-                                            <div class="detail-row">
-                                                <i class="fas fa-flag-checkered"></i>
-                                                <strong>Drop-off:</strong>
-                                                <span><?php echo htmlspecialchars($ride['dropoff_address']); ?></span>
-                                            </div>
-                                            <?php if ($ride['status'] === 'completed'): ?>
-                                                <?php if ($ride['rating']): ?>
-                                                    <div class="detail-row">
-                                                        <i class="fas fa-star"></i>
-                                                        <strong>Rating:</strong>
-                                                        <span class="rating-badge <?php echo htmlspecialchars($ride['rating']); ?>" title="<?php echo ucfirst(htmlspecialchars($ride['rating'])); ?>">
-                                                            <?php echo renderRatingStars($ride['rating']); ?>
-                                                        </span>
-                                                    </div>
-                                                <?php else: ?>
-                                                    <div class="detail-row">
-                                                        <i class="fas fa-star"></i>
-                                                        <strong>Rating:</strong>
-                                                        <span>Not rated yet</span>
-                                                    </div>
-                                                <?php endif; ?>
-                                            <?php endif; ?>
-                                            <?php if ($ride['status'] === 'completed' && !$ride['rating']): ?>
-                                                <form method="POST" class="rating-form" onclick="event.stopPropagation();">
-                                                    <input type="hidden" name="ride_id" value="<?php echo intval($ride['id']); ?>">
-                                                    <div class="rating-stars">
-                                                        <input type="radio" id="rating-5-<?php echo intval($ride['id']); ?>" name="rating" value="good" required>
-                                                        <label for="rating-5-<?php echo intval($ride['id']); ?>" title="Good">★</label>
-                                                        <input type="radio" id="rating-4-<?php echo intval($ride['id']); ?>" name="rating" value="satisfied">
-                                                        <label for="rating-4-<?php echo intval($ride['id']); ?>" title="Satisfied">★</label>
-                                                        <input type="radio" id="rating-3-<?php echo intval($ride['id']); ?>" name="rating" value="neutral">
-                                                        <label for="rating-3-<?php echo intval($ride['id']); ?>" title="Neutral">★</label>
-                                                        <input type="radio" id="rating-2-<?php echo intval($ride['id']); ?>" name="rating" value="dissatisfied">
-                                                        <label for="rating-2-<?php echo intval($ride['id']); ?>" title="Dissatisfied">★</label>
-                                                        <input type="radio" id="rating-1-<?php echo intval($ride['id']); ?>" name="rating" value="bad">
-                                                        <label for="rating-1-<?php echo intval($ride['id']); ?>" title="Bad">★</label>
-                                                    </div>
-                                                    <button type="submit" name="rate_driver" class="btn-secondary small">Submit Rating</button>
-                                                </form>
-                                            <?php endif; ?>
-                                        </div>
+                                <?php while ($ride = $history->fetch_assoc()): ?>
+                                <div class="history-item">
+                                    <div class="history-header">
+                                        <span class="ride-date"><?php echo date('M d, h:i A', strtotime($ride['created_at'])); ?></span>
+                                        <span class="ride-status <?php echo $ride['status']; ?>">
+                                            <?php echo ucfirst($ride['status']); ?>
+                                        </span>
                                     </div>
+                                    <div class="history-details">
+                                        <?php if (!empty($ride['rating']) || !empty($ride['driver_rating'])): ?>
+                                            <?php if (!empty($ride['rating'])): ?>
+                                            <div class="detail-row">
+                                                <i class="fas fa-star"></i>
+                                                <strong>Your Feedback:</strong>
+                                                <span class="rating-badge <?php echo htmlspecialchars($ride['rating']); ?>"><?php echo renderRatingStars($ride['rating']); ?></span>
+                                            </div>
+                                            <?php if (!empty($ride['passenger_feedback'])): ?>
+                                                <div class="detail-row">
+                                                    <i class="fas fa-comment-alt"></i>
+                                                    <strong>Comment:</strong>
+                                                    <span><?php echo htmlspecialchars($ride['passenger_feedback']); ?></span>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php endif; ?>
+
+                                            <?php if (!empty($ride['driver_rating'])): ?>
+                                            <div class="detail-row" style="margin-top:10px;">
+                                                <i class="fas fa-user-check"></i>
+                                                <strong>Driver Feedback:</strong>
+                                                <span class="rating-badge <?php echo htmlspecialchars($ride['driver_rating']); ?>"><?php echo renderRatingStars($ride['driver_rating']); ?></span>
+                                            </div>
+                                            <?php if (!empty($ride['driver_feedback'])): ?>
+                                                <div class="detail-row">
+                                                    <i class="fas fa-comment-dots"></i>
+                                                    <strong>Driver Comment:</strong>
+                                                    <span><?php echo htmlspecialchars($ride['driver_feedback']); ?></span>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <div class="detail-row" style="color:var(--gray);font-size:0.9em;">
+                                                <i class="fas fa-info-circle"></i>
+                                                <span>No feedback submitted yet.</span>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="history-expanded">
+                                    </div>
+                                </div>
                                 <?php endwhile; ?>
                             </div>
                         <?php else: ?>
@@ -612,24 +671,109 @@ $history = $historyStmt->get_result();
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
         
+        const markerIcon = (color) => L.icon({
+            iconUrl: `https://cdn.jsdelivr.net/npm/leaflet-color-markers@1.0.0/img/marker-icon-${color}.png`,
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34]
+        });
+
         let passengerMarker = null;
+        let pickupMarker = null;
+        let dropoffMarker = null;
+        let activePicker = 'pickup';
+        const pickupField = document.getElementById('pickup');
+        const dropoffField = document.getElementById('dropoff');
+        const pickerStatus = document.getElementById('mapPickerStatus');
         
         function updatePassengerLocation(lat, lng) {
             if (!passengerMarker) {
-                passengerMarker = L.marker([lat, lng], {
-                    icon: L.icon({
-                        iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
-                        iconSize: [25, 41],
-                        iconAnchor: [12, 41],
-                        popupAnchor: [1, -34]
-                    })
-                }).addTo(map);
+                passengerMarker = L.marker([lat, lng], { icon: markerIcon('green') }).addTo(map);
                 passengerMarker.bindPopup("<b>Your Location</b>").openPopup();
             } else {
                 passengerMarker.setLatLng([lat, lng]);
             }
             map.setView([lat, lng], 15);
         }
+
+        function formatMapAddress(type, latlng) {
+            const label = type === 'pickup' ? 'Map Pickup' : 'Map Drop-off';
+            return `${label} (${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)})`;
+        }
+
+        function setCoordinateFields(type, latlng) {
+            document.getElementById(`${type}_lat`).value = latlng.lat.toFixed(7);
+            document.getElementById(`${type}_lng`).value = latlng.lng.toFixed(7);
+        }
+
+        function placeRideMarker(type, latlng) {
+            const isPickup = type === 'pickup';
+            const markerText = isPickup ? 'Pickup' : 'Drop-off';
+            const icon = markerIcon(isPickup ? 'blue' : 'red');
+            const existingMarker = isPickup ? pickupMarker : dropoffMarker;
+
+            if (existingMarker) {
+                existingMarker.setLatLng(latlng);
+            } else {
+                const marker = L.marker(latlng, { icon, draggable: true }).addTo(map);
+                marker.bindPopup(`<b>${markerText}</b>`);
+                marker.on('dragend', function () {
+                    const draggedLatLng = marker.getLatLng();
+                    setCoordinateFields(type, draggedLatLng);
+                    if (isPickup && pickupField) pickupField.value = formatMapAddress(type, draggedLatLng);
+                    if (!isPickup && dropoffField) dropoffField.value = formatMapAddress(type, draggedLatLng);
+                    updateFarePreview();
+                });
+
+                if (isPickup) {
+                    pickupMarker = marker;
+                } else {
+                    dropoffMarker = marker;
+                }
+            }
+
+            setCoordinateFields(type, latlng);
+            if (isPickup && pickupField) pickupField.value = formatMapAddress(type, latlng);
+            if (!isPickup && dropoffField) dropoffField.value = formatMapAddress(type, latlng);
+            if (pickerStatus) {
+                pickerStatus.textContent = isPickup ? 'Pickup pin set. Choose Drop-off, then tap the map.' : 'Drop-off pin set. You can drag either pin to adjust the route.';
+            }
+            activePicker = isPickup ? 'dropoff' : 'pickup';
+            updateFarePreview();
+        }
+
+        document.getElementById('selectPickupBtn')?.addEventListener('click', () => {
+            activePicker = 'pickup';
+            if (pickerStatus) pickerStatus.textContent = 'Tap the map to set your pickup pin.';
+            document.getElementById('live-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+
+        document.getElementById('selectDropoffBtn')?.addEventListener('click', () => {
+            activePicker = 'dropoff';
+            if (pickerStatus) pickerStatus.textContent = 'Tap the map to set your drop-off pin.';
+            document.getElementById('live-map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+
+        document.getElementById('clearMapSelectionBtn')?.addEventListener('click', () => {
+            if (pickupMarker) map.removeLayer(pickupMarker);
+            if (dropoffMarker) map.removeLayer(dropoffMarker);
+            pickupMarker = null;
+            dropoffMarker = null;
+            ['pickup_lat', 'pickup_lng', 'dropoff_lat', 'dropoff_lng'].forEach(id => {
+                const field = document.getElementById(id);
+                if (field) field.value = '';
+            });
+            if (pickupField) pickupField.value = '';
+            if (dropoffField) dropoffField.value = '';
+            activePicker = 'pickup';
+            if (pickerStatus) pickerStatus.textContent = 'Click Pickup, then tap the map. Click Drop-off, then tap the map again.';
+            updateFarePreview();
+        });
+
+        map.on('click', function (event) {
+            if (!pickupField || !dropoffField) return;
+            placeRideMarker(activePicker, event.latlng);
+        });
         
         function trackPassenger() {
             if (!navigator.geolocation) {
@@ -674,16 +818,6 @@ $history = $historyStmt->get_result();
         }, 10000);
         <?php endif; ?>
 
-        // Expand recent ride details on click
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('.history-item.clickable').forEach(item => {
-                item.addEventListener('click', () => {
-                    item.classList.toggle('open');
-                });
-            });
-
-        });
-
         // Mobile sidebar toggle
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
@@ -692,8 +826,168 @@ $history = $historyStmt->get_result();
             overlay.classList.toggle('active');
         }
     </script>
+    <!-- ===== FEEDBACK MODAL ===== -->
+    <?php
+    // Find the most recent completed ride that passenger hasn't rated yet
+    $pendingFeedbackStmt = $conn->prepare(
+        "SELECT r.id, r.pickup_address, r.dropoff_address, r.fare, du.name as driver_name
+         FROM rides r
+         LEFT JOIN drivers d ON r.driver_id = d.id
+         LEFT JOIN users du ON d.user_id = du.id
+         WHERE r.passenger_id = ? AND r.status = 'completed' AND r.passenger_rated = 0
+         ORDER BY r.updated_at DESC LIMIT 1"
+    );
+    $pendingFeedbackStmt->bind_param("i", $_SESSION['user_id']);
+    $pendingFeedbackStmt->execute();
+    $pendingRide = $pendingFeedbackStmt->get_result()->fetch_assoc();
+    $pendingFeedbackStmt->close();
+    ?>
+    <?php if ($pendingRide): ?>
+    <div class="feedback-modal-overlay" id="feedbackModal">
+        <div class="feedback-modal">
+            <button class="modal-close" onclick="document.getElementById('feedbackModal').classList.remove('active')" title="Close">
+                <i class="fas fa-times"></i>
+            </button>
+            <h3><i class="fas fa-star" style="color:#f4a50a;"></i> Rate Your Ride</h3>
+            <p style="color:var(--gray);font-size:0.9em;margin-bottom:14px;">How was your experience? Your feedback helps improve TriWheel.</p>
+            <div class="modal-ride-info">
+                <div><i class="fas fa-user"></i> Driver: <strong><?php echo htmlspecialchars($pendingRide['driver_name'] ?? 'N/A'); ?></strong></div>
+                <div style="margin-top:4px;"><i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars(substr($pendingRide['pickup_address'], 0, 28)); ?>... → <?php echo htmlspecialchars(substr($pendingRide['dropoff_address'], 0, 22)); ?>...</div>
+                <?php if ($pendingRide['fare']): ?>
+                <div style="margin-top:4px;"><i class="fas fa-money-bill-wave"></i> Fare: <strong>₱<?php echo number_format($pendingRide['fare'], 2); ?></strong></div>
+                <?php endif; ?>
+            </div>
+            <form method="POST" class="feedback-form" id="modalFeedbackForm">
+                <input type="hidden" name="ride_id" value="<?php echo intval($pendingRide['id']); ?>">
+                <div class="star-rating" style="margin-bottom:16px;" aria-label="Rate your ride">
+                    <?php
+                    $modalRatings = [
+                        'good'              => 5,
+                        'satisfied'         => 4,
+                        'neutral'           => 3,
+                        'dissatisfied'      => 2,
+                        'very_dissatisfied' => 1,
+                    ];
+                    foreach ($modalRatings as $val => $stars): ?>
+                    <input type="radio" id="passenger-modal-rating-<?php echo $stars; ?>" name="rating" value="<?php echo $val; ?>" required>
+                    <label for="passenger-modal-rating-<?php echo $stars; ?>" aria-label="<?php echo $stars; ?> stars"></label>
+                    <?php endforeach; ?>
+                </div>
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:0.9em;font-weight:500;display:block;margin-bottom:6px;">
+                        <i class="fas fa-comment-alt"></i> Comment <span style="color:var(--gray);font-weight:400;">(optional)</span>
+                    </label>
+                    <textarea name="passenger_feedback" rows="3" placeholder="Tell us about your experience..." style="width:100%;padding:10px;border:2px solid var(--gray-light);border-radius:10px;font-family:inherit;font-size:0.9em;resize:vertical;box-sizing:border-box;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--gray-light)'"></textarea>
+                </div>
+                <button type="submit" name="rate_driver" class="btn-primary btn-block">
+                    <i class="fas fa-paper-plane"></i> Submit Feedback
+                </button>
+                <button type="button" onclick="document.getElementById('feedbackModal').classList.remove('active')" class="btn-secondary btn-block" style="margin-top:10px;">
+                    Maybe Later
+                </button>
+            </form>
+        </div>
+    </div>
+    <script>
+        // Auto-show modal after short delay if there's a pending feedback
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                const modal = document.getElementById('feedbackModal');
+                if (modal) modal.classList.add('active');
+            }, 800);
+        });
+        // Close modal on overlay click
+        document.getElementById('feedbackModal')?.addEventListener('click', function(e) {
+            if (e.target === this) this.classList.remove('active');
+        });
+    </script>
+    <?php endif; ?>
 
+    <script>
+        const triwheelLocations = {
+            'itech building': [14.5987, 120.9848],
+            'public market': [14.6042, 120.9822],
+            'tricycle terminal': [14.6070, 120.9890],
+            'pedicab terminal': [14.6048, 120.9862],
+            'pup main': [14.5981, 120.9870],
+            'cea building': [14.5979, 120.9855],
+            'barangay hall': [14.5968, 120.9878],
+            'church': [14.5908, 120.9812],
+            'plaza': [14.5998, 120.9850]
+        };
+
+        function fallbackCoordinates(address) {
+            let hash = 0;
+            for (let i = 0; i < address.length; i++) {
+                hash = ((hash << 5) - hash) + address.charCodeAt(i);
+                hash |= 0;
+            }
+            const latOffset = (((Math.abs(hash) % 2000) - 1000) / 100000);
+            const lngOffset = (((Math.abs(Math.floor(hash / 2000)) % 2000) - 1000) / 100000);
+            return [14.5995 + latOffset, 120.9842 + lngOffset];
+        }
+
+        function resolveCoordinates(address) {
+            const normalized = address.trim().toLowerCase();
+            for (const key in triwheelLocations) {
+                if (normalized.includes(key)) return triwheelLocations[key];
+            }
+            return normalized ? fallbackCoordinates(normalized) : null;
+        }
+
+        function distanceKm(a, b) {
+            const toRad = value => value * Math.PI / 180;
+            const earthRadius = 6371;
+            const dLat = toRad(b[0] - a[0]);
+            const dLng = toRad(b[1] - a[1]);
+            const x = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLng / 2) ** 2;
+            return earthRadius * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
+        }
+
+        function updateFarePreview() {
+            const pickup = document.getElementById('pickup');
+            const dropoff = document.getElementById('dropoff');
+            const preview = document.getElementById('farePreview');
+            if (!pickup || !dropoff || !preview) return;
+
+            const selectedPickupLat = parseFloat(document.getElementById('pickup_lat')?.value || '');
+            const selectedPickupLng = parseFloat(document.getElementById('pickup_lng')?.value || '');
+            const selectedDropoffLat = parseFloat(document.getElementById('dropoff_lat')?.value || '');
+            const selectedDropoffLng = parseFloat(document.getElementById('dropoff_lng')?.value || '');
+            const pickupCoords = Number.isFinite(selectedPickupLat) && Number.isFinite(selectedPickupLng)
+                ? [selectedPickupLat, selectedPickupLng]
+                : resolveCoordinates(pickup.value);
+            const dropoffCoords = Number.isFinite(selectedDropoffLat) && Number.isFinite(selectedDropoffLng)
+                ? [selectedDropoffLat, selectedDropoffLng]
+                : resolveCoordinates(dropoff.value);
+            if (!pickupCoords || !dropoffCoords) {
+                preview.style.display = 'none';
+                return;
+            }
+
+            const km = distanceKm(pickupCoords, dropoffCoords);
+            const fare = Math.max(10, 10 + (km * 12));
+            document.getElementById('farePreviewAmount').textContent = `₱${fare.toFixed(2)}`;
+            document.getElementById('farePreviewDistance').textContent = `${km.toFixed(2)} km`;
+            preview.style.display = 'block';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            ['pickup', 'dropoff'].forEach(id => {
+                const field = document.getElementById(id);
+                if (field) field.addEventListener('input', () => {
+                    const latField = document.getElementById(`${id}_lat`);
+                    const lngField = document.getElementById(`${id}_lng`);
+                    if (!field.value.startsWith('Map ')) {
+                        if (latField) latField.value = '';
+                        if (lngField) lngField.value = '';
+                    }
+                    updateFarePreview();
+                });
+            });
+            updateFarePreview();
+        });
+    </script>
+<?php echo csrf_form_script(); ?>
 </body>
 </html>
-
-

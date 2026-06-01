@@ -1,10 +1,13 @@
 <?php
-session_start();
+require 'auth.php';
 require 'db.php';
+require 'system_helpers.php';
 
 ini_set('display_errors', '0');
 ini_set('display_startup_errors', '0');
 error_reporting(0);
+header('Content-Type: text/html; charset=utf-8');
+require_valid_csrf();
 
 /* ===== AUTH CHECK ===== */
 if (!isset($_SESSION['user_id'])) {
@@ -15,12 +18,50 @@ if (!isset($_SESSION['user_id'])) {
 $error = '';
 $success = '';
 
+$hasVerifiedColumn = triwheel_column_exists($conn, 'users', 'is_verified');
+
 // Fetch current user data
-$userStmt = $conn->prepare("SELECT first_name, middle_name, last_name, email, contact_number FROM users WHERE id = ?");
+if ($hasVerifiedColumn) {
+    $userStmt = $conn->prepare(
+        "SELECT first_name, middle_name, last_name, email, contact_number, role, is_verified FROM users WHERE id = ?"
+    );
+} else {
+    $userStmt = $conn->prepare(
+        "SELECT first_name, middle_name, last_name, email, contact_number, role FROM users WHERE id = ?"
+    );
+}
 $userStmt->bind_param("i", $_SESSION['user_id']);
 $userStmt->execute();
 $userData = $userStmt->get_result()->fetch_assoc();
 $userStmt->close();
+
+$userData['approval_status'] = null;
+if ($_SESSION['user_role'] === 'driver') {
+    $driverStmt = $conn->prepare("SELECT approval_status FROM drivers WHERE user_id = ? LIMIT 1");
+    $driverStmt->bind_param("i", $_SESSION['user_id']);
+    $driverStmt->execute();
+    $driverRow = $driverStmt->get_result()->fetch_assoc();
+    $driverStmt->close();
+    $userData['approval_status'] = $driverRow['approval_status'] ?? null;
+}
+
+$verifiedBadge = false;
+$verifiedBadgeText = '';
+if ($_SESSION['user_role'] === 'driver') {
+    if (($userData['approval_status'] ?? '') === 'approved') {
+        $verifiedBadge = true;
+        $verifiedBadgeText = 'Verified Driver';
+    }
+} elseif ($_SESSION['user_role'] === 'passenger') {
+    if ($hasVerifiedColumn) {
+        $verifiedBadge = !empty($userData['is_verified']);
+    } else {
+        // Passenger accounts are treated as verified when no explicit verification flag exists.
+        $verifiedBadge = true;
+    }
+    $verifiedBadgeText = 'Verified Passenger';
+}
+
 
 if (!$userData) {
     header("Location: login.php");
@@ -173,190 +214,479 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - TriWheel</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="auth.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet">
 </head>
-<body>
-    <div class="auth-container">
-        <!-- Left Side - Branding & Info -->
-        <div class="auth-left">
-            <div class="auth-brand">
-                <a href="<?php echo $_SESSION['user_role'] === 'passenger' ? 'passenger.php' : 'driver.php'; ?>" class="back-home">
-                    <i class="fas fa-arrow-left"></i> Back to Dashboard
-                </a>
-                <div class="brand-logo">
-                    <img src="logo.png" alt="TriWheel Logo">
-                    <h1>TriWheel</h1>
-                </div>
-                <p class="brand-tagline">Manage your account settings</p>
-            </div>
+<body class="app-dashboard app-<?php echo $_SESSION['user_role'] ?? 'user'; ?>">
+    <!-- Persistent Sidebar Navigation -->
+    <?php require 'navbar.php'; ?>
 
-            <div class="auth-benefits">
-                <h3>Account Settings</h3>
-                <div class="benefits-list">
-                    <div class="benefit">
-                        <i class="fas fa-check-circle"></i>
-                        <span>Update your personal information</span>
-                    </div>
-                    <div class="benefit">
-                        <i class="fas fa-check-circle"></i>
-                        <span>Change your password securely</span>
-                    </div>
-                    <div class="benefit">
-                        <i class="fas fa-check-circle"></i>
-                        <span>Keep your contact details current</span>
+    <main class="settings-container">
+        <div class="settings-wrapper">
+            <!-- Profile Card Section -->
+            <div class="profile-card">
+                <div class="profile-avatar">
+                    <div class="avatar-circle">
+                        <?php 
+                            $initials = strtoupper(substr($userData['first_name'] ?? 'U', 0, 1) . substr($userData['last_name'] ?? 'U', 0, 1));
+                            echo $initials;
+                        ?>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Right Side - Settings Form -->
-        <div class="auth-right">
-            <div class="auth-form-container">
-                <div class="auth-header">
-                    <h2>Account Settings</h2>
-                    <p>Update your profile information</p>
-                </div>
-
-                <?php if ($error): ?>
-                    <div class="alert alert-error">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <?php echo htmlspecialchars($error); ?>
+                
+                <h2 class="profile-name"><?php echo htmlspecialchars($userData['first_name'] . ' ' . $userData['last_name']); ?></h2>
+                <p class="profile-email"><?php echo htmlspecialchars($userData['email'] ?? ''); ?></p>
+                <p class="profile-phone"><?php echo htmlspecialchars($userData['contact_number'] ?? ''); ?></p>
+                <?php if (!empty($verifiedBadge)): ?>
+                    <div style="margin-top:8px;">
+                        <span class="verification-badge">
+                            <i class="fas fa-check-circle"></i> <?php echo htmlspecialchars($verifiedBadgeText); ?>
+                        </span>
                     </div>
                 <?php endif; ?>
+            </div>
 
-                <?php if ($success): ?>
-                    <div class="alert alert-success">
-                        <i class="fas fa-check-circle"></i>
-                        <?php echo htmlspecialchars($success); ?>
-                    </div>
-                <?php endif; ?>
+            <!-- Alerts -->
+            <?php if ($error): ?>
+                <div class="alert alert-error">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <?php echo htmlspecialchars($error); ?>
+                </div>
+            <?php endif; ?>
 
-                <form method="POST" class="auth-form" id="settingsForm">
-                    <div class="form-group">
-                        <label for="first_name">
-                            <i class="fas fa-user"></i> First Name
-                        </label>
-                        <input type="text" id="first_name" name="first_name" required 
-                               placeholder="Enter your first name"
-                               value="<?php echo htmlspecialchars($post_first_name); ?>">
-                    </div>
+            <?php if ($success): ?>
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i>
+                    <?php echo htmlspecialchars($success); ?>
+                </div>
+            <?php endif; ?>
 
-                    <div class="form-group">
-                        <label for="middle_name">
-                            <i class="fas fa-user"></i> Middle Name (Optional)
-                        </label>
-                        <input type="text" id="middle_name" name="middle_name" 
-                               placeholder="Enter your middle name"
-                               value="<?php echo htmlspecialchars($post_middle_name); ?>">
-                    </div>
+            <!-- Settings Menu -->
+            <div class="settings-menu">
+                <div class="settings-section">
+                    <h3 class="section-title">ACCOUNT SETTINGS</h3>
+                    
+                    <button type="button" class="settings-item" onclick="toggleSection('personal-info')">
+                        <div class="settings-item-left">
+                            <i class="fas fa-user"></i>
+                            <span>Personal Information</span>
+                        </div>
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    
+                    <button type="button" class="settings-item" onclick="toggleSection('security')">
+                        <div class="settings-item-left">
+                            <i class="fas fa-lock"></i>
+                            <span>Security</span>
+                        </div>
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
 
-                    <div class="form-group">
-                        <label for="last_name">
-                            <i class="fas fa-user"></i> Last Name
-                        </label>
-                        <input type="text" id="last_name" name="last_name" required 
-                               placeholder="Enter your last name"
-                               value="<?php echo htmlspecialchars($post_last_name); ?>">
-                    </div>
+                <div class="settings-section">
+                    <h3 class="section-title">HELP & SUPPORT</h3>
+                    
+                    <a href="#" class="settings-item">
+                        <div class="settings-item-left">
+                            <i class="fas fa-headset"></i>
+                            <span>Contact Support</span>
+                        </div>
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
 
-                    <div class="form-group">
-                        <label for="email">
-                            <i class="fas fa-envelope"></i> Email Address
-                        </label>
-                        <input type="email" id="email" name="email" required 
-                               placeholder="Enter your email address"
-                               value="<?php echo htmlspecialchars($post_email); ?>">
-                    </div>
+            <!-- Personal Information Form -->
+            <div id="personal-info" class="settings-section-content" style="display: none;">
+                <div class="settings-form-card">
+                    <h3><i class="fas fa-user"></i> Personal Information</h3>
+                    
+                    <form method="POST" class="settings-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="first_name">First Name</label>
+                                <input type="text" id="first_name" name="first_name" required 
+                                       value="<?php echo htmlspecialchars($post_first_name); ?>">
+                            </div>
+                            <div class="form-group">
+                                <label for="last_name">Last Name</label>
+                                <input type="text" id="last_name" name="last_name" required 
+                                       value="<?php echo htmlspecialchars($post_last_name); ?>">
+                            </div>
+                        </div>
 
-                    <div class="form-group">
-                        <label for="contact_number">
-                            <i class="fas fa-phone"></i> Contact Number
-                        </label>
-                        <input type="tel" id="contact_number" name="contact_number" required 
-                               placeholder="Enter your contact number"
-                               value="<?php echo htmlspecialchars($post_contact); ?>">
-                    </div>
+                        <div class="form-group">
+                            <label for="middle_name">Middle Name (Optional)</label>
+                            <input type="text" id="middle_name" name="middle_name" 
+                                   value="<?php echo htmlspecialchars($post_middle_name); ?>">
+                        </div>
 
-                    <?php if ($_SESSION['user_role'] === 'driver'): ?>
-                    <div class="form-group">
-                        <label for="license_number">
-                            <i class="fas fa-id-card"></i> License Number
-                        </label>
-                        <input type="text" id="license_number" name="license_number" required 
-                               placeholder="Enter your driver's license number"
-                               value="<?php echo htmlspecialchars($post_license); ?>">
-                    </div>
+                        <div class="form-group">
+                            <label for="email">Email Address</label>
+                            <input type="email" id="email" name="email" required 
+                                   value="<?php echo htmlspecialchars($post_email); ?>">
+                        </div>
 
-                    <div class="form-group">
-                        <label for="plate_number">
-                            <i class="fas fa-car"></i> Plate Number
-                        </label>
-                        <input type="text" id="plate_number" name="plate_number" required 
-                               placeholder="Enter your vehicle plate number"
-                               value="<?php echo htmlspecialchars($post_plate); ?>">
-                    </div>
-                    <?php endif; ?>
+                        <div class="form-group">
+                            <label for="contact_number">Contact Number</label>
+                            <input type="tel" id="contact_number" name="contact_number" required 
+                                   value="<?php echo htmlspecialchars($post_contact); ?>">
+                        </div>
 
-                    <div class="form-group">
-                        <label for="current_password">
-                            <i class="fas fa-lock"></i> Current Password (Required to change password)
-                        </label>
-                        <input type="password" id="current_password" name="current_password" 
-                               placeholder="Enter current password to change it">
-                    </div>
+                        <?php if ($_SESSION['user_role'] === 'driver'): ?>
+                            <div class="form-group">
+                                <label for="license_number">License Number</label>
+                                <input type="text" id="license_number" name="license_number" required 
+                                       value="<?php echo htmlspecialchars($post_license); ?>">
+                            </div>
 
-                    <div class="form-group">
-                        <label for="new_password">
-                            <i class="fas fa-lock"></i> New Password (Leave blank to keep current)
-                        </label>
-                        <div class="password-input">
+                            <div class="form-group">
+                                <label for="plate_number">Plate Number</label>
+                                <input type="text" id="plate_number" name="plate_number" required 
+                                       value="<?php echo htmlspecialchars($post_plate); ?>">
+                            </div>
+                        <?php endif; ?>
+
+                        <button type="submit" class="btn-save">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Security Form -->
+            <div id="security" class="settings-section-content" style="display: none;">
+                <div class="settings-form-card">
+                    <h3><i class="fas fa-lock"></i> Change Password</h3>
+                    
+                    <form method="POST" class="settings-form">
+                        <div class="form-group">
+                            <label for="current_password">Current Password</label>
+                            <input type="password" id="current_password" name="current_password" 
+                                   placeholder="Enter current password">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="new_password">New Password</label>
                             <input type="password" id="new_password" name="new_password" 
                                    placeholder="Enter new password (min. 6 characters)"
                                    minlength="6">
-                            <button type="button" class="toggle-password" onclick="togglePassword()">
-                                <i class="fas fa-eye"></i>
-                            </button>
                         </div>
-                        <div class="password-strength">
-                            <div class="strength-bar"></div>
-                            <span class="strength-text">Password strength</span>
+
+                        <div class="form-group">
+                            <label for="confirm_password">Confirm New Password</label>
+                            <input type="password" id="confirm_password" name="confirm_password" 
+                                   placeholder="Confirm new password">
                         </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label for="confirm_password">
-                            <i class="fas fa-lock"></i> Confirm New Password
-                        </label>
-                        <input type="password" id="confirm_password" name="confirm_password" 
-                               placeholder="Confirm new password">
-                    </div>
-
-                    <button type="submit" class="btn-primary" style="width: 100%;">
-                        <i class="fas fa-save"></i> Update Profile
-                    </button>
-                </form>
+                        <button type="submit" class="btn-save">
+                            <i class="fas fa-save"></i> Update Password
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
+    </main>
 
-    <script>
-        function togglePassword() {
-            const passwordInput = document.getElementById('new_password');
-            const toggleBtn = document.querySelector('.toggle-password i');
-            
-            if (passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                toggleBtn.classList.remove('fa-eye');
-                toggleBtn.classList.add('fa-eye-slash');
-            } else {
-                passwordInput.type = 'password';
-                toggleBtn.classList.remove('fa-eye-slash');
-                toggleBtn.classList.add('fa-eye');
+    <style>
+        .settings-container {
+            padding: 24px;
+            max-width: 900px;
+            margin: 40px auto;
+        }
+
+        .settings-wrapper {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Profile Card */
+        .profile-card {
+            background: linear-gradient(135deg, #f5f5f5, #fafafa);
+            padding: 24px 16px;
+            text-align: center;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .profile-avatar {
+            margin-bottom: 12px;
+            position: relative;
+            display: inline-block;
+        }
+
+        .avatar-circle {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .verification-badge {
+            position: static;
+            display: inline-block;
+            margin: 8px auto 0;
+            background: var(--success);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-width: 120px;
+            max-width: 220px;
+            text-align: center;
+        }
+
+        .profile-name {
+            margin: 12px 0 6px 0;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .profile-email {
+            margin: 0 0 4px 0;
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .profile-phone {
+            margin: 0;
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        /* Settings Menu */
+        .settings-menu {
+            padding: 20px 0;
+        }
+
+        .settings-section {
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .settings-section:last-child {
+            border-bottom: none;
+        }
+
+        .section-title {
+            padding: 12px 20px;
+            margin: 0;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--gray);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #f9fafb;
+        }
+
+        .settings-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 16px 20px;
+            border: none;
+            background: white;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            border-bottom: 1px solid #f0f0f0;
+            text-align: left;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .settings-item:hover,
+        .settings-item:focus-visible {
+            background: #eef4ff;
+            transform: translateY(-0.5px);
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+            outline: none;
+            color: var(--primary);
+        }
+
+        .settings-item:hover .settings-item-left span,
+        .settings-item:focus-visible .settings-item-left span {
+            color: var(--primary);
+        }
+
+        .settings-item:focus-visible {
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18);
+        }
+
+        .settings-item:active {
+            transform: translateY(0);
+        }
+
+        .settings-item-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .settings-item i {
+            color: var(--primary);
+            font-size: 1.1rem;
+        }
+
+        .settings-item span {
+            color: var(--dark);
+            font-weight: 500;
+        }
+
+        .settings-item .fa-chevron-right {
+            color: var(--gray-light);
+            font-size: 0.9rem;
+        }
+
+        /* Forms */
+        .settings-section-content {
+            padding: 20px;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .settings-form-card {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+        }
+
+        .settings-form-card h3 {
+            margin: 0 0 20px 0;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .settings-form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: var(--dark);
+            font-size: 0.9rem;
+        }
+
+        .form-group input {
+            padding: 10px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(244, 98, 58, 0.1);
+        }
+
+        .btn-save {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+            margin-top: 8px;
+        }
+
+        .btn-save:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .alert-success {
+            background: #d1e7dd;
+            color: #0f5132;
+            border: 1px solid #badbcc;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #842029;
+            border: 1px solid #f5c2c7;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .profile-card {
+                padding: 30px 15px;
+            }
+
+            .settings-form-card {
+                padding: 16px;
+            }
+
+            .settings-container {
+                padding: 20px 15px;
             }
         }
+    </style>
+
+    <script>
+        function toggleSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            const allSections = document.querySelectorAll('.settings-section-content');
+            
+            allSections.forEach(s => {
+                if (s.id !== sectionId) {
+                    s.style.display = 'none';
+                }
+            });
+
+            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+        }
     </script>
+<?php echo csrf_form_script(); ?>
 </body>
 </html>
 

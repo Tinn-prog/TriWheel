@@ -1,6 +1,10 @@
-    <?php
-session_start();
+<?php
+require 'auth.php';
 require 'db.php';
+require 'system_helpers.php';
+header('Content-Type: text/html; charset=utf-8');
+triwheel_ensure_schema($conn);
+require_valid_csrf();
 
 // Only logged-in drivers can access
 if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'driver') {
@@ -10,16 +14,42 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'driver') {
 
 $userId = $_SESSION['user_id'];
 $error = '';
+$existingDriver = null;
 
-// Prevent duplicate driver info
-$check = $conn->prepare("SELECT id FROM drivers WHERE user_id = ?");
+// Fetch the driver's approval_status (approved/pending/rejected).
+// Approved and pending drivers are shown the details form; rejected drivers may resubmit.
+$check = $conn->prepare("SELECT id, approval_status, rejection_reason, license_number, phone, license_file, toda_id_file FROM drivers WHERE user_id = ?");
 $check->bind_param("i", $userId);
 $check->execute();
-$check->store_result();
+$existingDriver = $check->get_result()->fetch_assoc();
+$check->close();
 
-if ($check->num_rows > 0) {
-    header("Location: driver.php");
-    exit;
+$vehicle = null;
+$initialLicense = '';
+$initialPhone = '';
+$initialVehicleType = 'tricycle';
+$initialPlate = '';
+$initialColor = '';
+$existingLicenseFile = '';
+$existingTodaFile = '';
+
+if ($existingDriver) {
+    $initialLicense = $existingDriver['license_number'] ?? '';
+    $initialPhone = $existingDriver['phone'] ?? '';
+    $existingLicenseFile = $existingDriver['license_file'] ?? '';
+    $existingTodaFile = $existingDriver['toda_id_file'] ?? '';
+
+    $vehicleStmt = $conn->prepare("SELECT vehicle_type, plate_number, color FROM vehicles WHERE driver_id = ? LIMIT 1");
+    $vehicleStmt->bind_param("i", $existingDriver['id']);
+    $vehicleStmt->execute();
+    $vehicle = $vehicleStmt->get_result()->fetch_assoc();
+    $vehicleStmt->close();
+
+    if ($vehicle) {
+        $initialVehicleType = $vehicle['vehicle_type'] ?? $initialVehicleType;
+        $initialPlate = $vehicle['plate_number'] ?? '';
+        $initialColor = $vehicle['color'] ?? '';
+    }
 }
 
 function saveDriverDocument($fieldName, $prefix, &$error) {
@@ -73,31 +103,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'All fields are required to complete your driver profile.';
     }
 
-    $licenseFile = null;
-    $todaFile = null;
+    $licenseFile = $existingDriver['license_file'] ?? null;
+    $todaFile = $existingDriver['toda_id_file'] ?? null;
     if ($error === '') {
-        $licenseFile = saveDriverDocument('license_doc', 'license', $error);
+        if ($existingDriver) {
+            if (isset($_FILES['license_doc']) && $_FILES['license_doc']['error'] !== UPLOAD_ERR_NO_FILE) {
+                $savedLicense = saveDriverDocument('license_doc', 'license', $error);
+                if ($error === '') {
+                    $licenseFile = $savedLicense;
+                }
+            }
+            if ($error === '' && isset($_FILES['toda_id_doc']) && $_FILES['toda_id_doc']['error'] !== UPLOAD_ERR_NO_FILE) {
+                $savedToda = saveDriverDocument('toda_id_doc', 'toda_id', $error);
+                if ($error === '') {
+                    $todaFile = $savedToda;
+                }
+            }
+        } else {
+            $licenseFile = saveDriverDocument('license_doc', 'license', $error);
+            if ($error === '') {
+                $todaFile = saveDriverDocument('toda_id_doc', 'toda_id', $error);
+            }
+        }
     }
-    if ($error === '') {
-        $todaFile = saveDriverDocument('toda_id_doc', 'toda_id', $error);
-    }
 
     if ($error === '') {
-        $stmt = $conn->prepare(
-            "INSERT INTO drivers (user_id, license_number, phone, license_file, toda_id_file, approval_status)
-             VALUES (?, ?, ?, ?, ?, 'pending')"
-        );
-        $stmt->bind_param("issss", $userId, $license, $phone, $licenseFile, $todaFile);
-        $stmt->execute();
+        if ($existingDriver) {
+            $driverId = intval($existingDriver['id']);
+            // Preserve existing approved status: only set to 'pending' when resubmitting after rejection
+            if (($existingDriver['approval_status'] ?? '') === 'approved') {
+                $stmt = $conn->prepare(
+                    "UPDATE drivers
+                     SET license_number = ?, phone = ?, license_file = ?, toda_id_file = ?
+                     WHERE id = ? AND user_id = ?"
+                );
+                $stmt->bind_param("ssssii", $license, $phone, $licenseFile, $todaFile, $driverId, $userId);
+            } else {
+                // New submission or previously rejected: move status to pending and clear rejection reason
+                $stmt = $conn->prepare(
+                    "UPDATE drivers
+                     SET license_number = ?, phone = ?, license_file = ?, toda_id_file = ?, approval_status = 'pending', rejection_reason = NULL
+                     WHERE id = ? AND user_id = ?"
+                );
+                $stmt->bind_param("ssssii", $license, $phone, $licenseFile, $todaFile, $driverId, $userId);
+            }
+            $stmt->execute();
 
-        $driverId = $conn->insert_id;
+            $vehicleCheck = $conn->prepare("SELECT id FROM vehicles WHERE driver_id = ? LIMIT 1");
+            $vehicleCheck->bind_param("i", $driverId);
+            $vehicleCheck->execute();
+            $vehicleExists = $vehicleCheck->get_result()->num_rows > 0;
+            $vehicleCheck->close();
 
-        $stmt = $conn->prepare(
-            "INSERT INTO vehicles (driver_id, vehicle_type, plate_number, color)
-             VALUES (?, ?, ?, ?)"
-        );
-        $stmt->bind_param("isss", $driverId, $vehicleType, $plate, $color);
-        $stmt->execute();
+            if ($vehicleExists) {
+                $stmt = $conn->prepare(
+                    "UPDATE vehicles SET vehicle_type = ?, plate_number = ?, color = ? WHERE driver_id = ?"
+                );
+                $stmt->bind_param("sssi", $vehicleType, $plate, $color, $driverId);
+                $stmt->execute();
+            } else {
+                $stmt = $conn->prepare(
+                    "INSERT INTO vehicles (driver_id, vehicle_type, plate_number, color)
+                     VALUES (?, ?, ?, ?)"
+                );
+                $stmt->bind_param("isss", $driverId, $vehicleType, $plate, $color);
+                $stmt->execute();
+            }
+        } else {
+            $stmt = $conn->prepare(
+                "INSERT INTO drivers (user_id, license_number, phone, license_file, toda_id_file, approval_status)
+                 VALUES (?, ?, ?, ?, ?, 'pending')"
+            );
+            $stmt->bind_param("issss", $userId, $license, $phone, $licenseFile, $todaFile);
+            $stmt->execute();
+
+            $driverId = $conn->insert_id;
+
+            $stmt = $conn->prepare(
+                "INSERT INTO vehicles (driver_id, vehicle_type, plate_number, color)
+                 VALUES (?, ?, ?, ?)"
+            );
+            $stmt->bind_param("isss", $driverId, $vehicleType, $plate, $color);
+            $stmt->execute();
+        }
 
         header("Location: driver.php");
         exit;
@@ -115,15 +203,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="logo logo-header-sec">
-                <i class="fas fa-biking" style="font-size: 2rem; color: var(--primary);"></i>
-                <span class="logo-text">TriWheel</span>
-            </div>
-        </div>
-    </nav>
+<body class="app-dashboard app-driver">
+    <?php require 'navbar.php'; ?>
 
     <main class="dashboard-container">
         <div class="container" style="max-width: 720px;">
@@ -143,33 +224,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <?php echo htmlspecialchars($error); ?>
                         </div>
                     <?php endif; ?>
+                    <?php if ($existingDriver && !empty($existingDriver['rejection_reason'])): ?>
+                        <div style="background:#fff3cd;color:#664d03;padding:12px;border-radius:10px;margin-bottom:16px;">
+                            <i class="fas fa-info-circle"></i>
+                            Previous rejection reason: <?php echo htmlspecialchars($existingDriver['rejection_reason']); ?>
+                        </div>
+                    <?php endif; ?>
                     <form method="post" enctype="multipart/form-data" class="booking-form">
                         <div class="form-group">
                             <label for="license">
                                 <i class="fas fa-id-card"></i> License Number
                             </label>
-                            <input type="text" id="license" name="license" placeholder="Enter license number" required>
+                            <input type="text" id="license" name="license" placeholder="Enter license number" required value="<?php echo htmlspecialchars($initialLicense); ?>">
                         </div>
 
                         <div class="form-group">
                             <label for="license_doc">
                                 <i class="fas fa-file-upload"></i> Upload License Document
                             </label>
-                            <input type="file" id="license_doc" name="license_doc" accept=".pdf,image/png,image/jpeg" required>
+                            <input type="file" id="license_doc" name="license_doc" accept=".pdf,image/png,image/jpeg" <?php echo $existingDriver ? '' : 'required'; ?>>
                         </div>
 
                         <div class="form-group">
                             <label for="toda_id_doc">
                                 <i class="fas fa-id-badge"></i> Upload TODA ID
                             </label>
-                            <input type="file" id="toda_id_doc" name="toda_id_doc" accept=".pdf,image/png,image/jpeg" required>
+                            <input type="file" id="toda_id_doc" name="toda_id_doc" accept=".pdf,image/png,image/jpeg" <?php echo $existingDriver ? '' : 'required'; ?>>
                         </div>
 
                         <div class="form-group">
                             <label for="phone">
                                 <i class="fas fa-phone"></i> Phone Number
                             </label>
-                            <input type="text" id="phone" name="phone" placeholder="Enter phone number" required>
+                            <input type="text" id="phone" name="phone" placeholder="Enter phone number" required value="<?php echo htmlspecialchars($initialPhone); ?>">
                         </div>
 
                         <div class="form-group">
@@ -177,9 +264,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <i class="fas fa-car-side"></i> Vehicle Type
                             </label>
                             <select id="vehicle_type" name="vehicle_type" required>
-                                <option value="tricycle">🚲 Tricycle</option>
-                                <option value="pedicab">🚲 Pedicab</option>
-                                <option value="e-tricycle">🛺 E Trike</option>
+                                <option value="tricycle" <?php echo $initialVehicleType === 'tricycle' ? 'selected' : ''; ?>>🚲 Tricycle</option>
+                                <option value="pedicab" <?php echo $initialVehicleType === 'pedicab' ? 'selected' : ''; ?>>🚲 Pedicab</option>
+                                <option value="e-tricycle" <?php echo $initialVehicleType === 'e-tricycle' ? 'selected' : ''; ?>>🛺 E Trike</option>
                             </select>
                         </div>
 
@@ -187,14 +274,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <label for="plate">
                                 <i class="fas fa-hashtag"></i> Plate Number
                             </label>
-                            <input type="text" id="plate" name="plate" placeholder="Enter plate number" required>
+                            <input type="text" id="plate" name="plate" placeholder="Enter plate number" required value="<?php echo htmlspecialchars($initialPlate); ?>">
                         </div>
 
                         <div class="form-group">
                             <label for="color">
                                 <i class="fas fa-palette"></i> Vehicle Color
                             </label>
-                            <input type="text" id="color" name="color" placeholder="Enter vehicle color" required>
+                            <input type="text" id="color" name="color" placeholder="Enter vehicle color" required value="<?php echo htmlspecialchars($initialColor); ?>">
                         </div>
 
                         <button type="submit" class="btn-primary full-width">
@@ -205,5 +292,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </main>
+<?php echo csrf_form_script(); ?>
 </body>
 </html>
