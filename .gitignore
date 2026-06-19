@@ -1,0 +1,24 @@
+# Dependencies
+**/node_modules/
+**/vendor/
+
+# Environment & secrets
+**/.env
+**/.env.local
+**/.env.*.local
+**/.env.production
+
+# Build outputs
+**/.next/
+**/public/build/
+**/public/hot/
+
+# Laravel storage (uploaded files)
+backend/storage/app/public/*
+!backend/storage/app/public/.gitignore
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
