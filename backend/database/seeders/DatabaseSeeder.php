@@ -29,6 +29,7 @@ class DatabaseSeeder extends Seeder
             'last_name' => 'Admin',
             'contact_number' => '09170000001',
             'role' => 'admin',
+            'admin_role' => 'super_admin',
             'is_verified' => true,
             'password' => $password,
         ]);
@@ -79,5 +80,7 @@ class DatabaseSeeder extends Seeder
             'plate_number' => 'TRI-001',
             'color' => 'Orange',
         ]);
+
+        $this->call(PlatformSettingsSeeder::class);
     }
 }

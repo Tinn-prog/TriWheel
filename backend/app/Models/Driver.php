@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -24,6 +25,9 @@ class Driver extends Model
         'toda_id_file',
         'toda_id_number',
         'toda_association',
+        'lgu',
+        'mtop_number',
+        'service_zone_id',
         'franchise_permit_file',
         'emergency_contact_name',
         'emergency_contact_number',
@@ -32,6 +36,10 @@ class Driver extends Model
         'submitted_at',
         'approval_status',
         'status',
+        'current_lat',
+        'current_lng',
+        'location_updated_at',
+        'auto_accept',
         'queue_position',
         'rejection_reason',
     ];
@@ -41,6 +49,8 @@ class Driver extends Model
         'license_expiry_date' => 'date',
         'background_check_consent' => 'boolean',
         'platform_rules_accepted' => 'boolean',
+        'auto_accept' => 'boolean',
+        'location_updated_at' => 'datetime',
         'submitted_at' => 'datetime',
     ];
 
@@ -62,5 +72,25 @@ class Driver extends Model
     public function offers(): HasMany
     {
         return $this->hasMany(RideOffer::class);
+    }
+
+    public const LIVE_GPS_FRESH_MINUTES = 3;
+
+    /**
+     * Approved drivers marked online with a recent GPS ping.
+     *
+     * @param  Builder<Driver>  $query
+     * @return Builder<Driver>
+     */
+    public function scopeOnlineWithLiveGps(Builder $query, ?int $freshMinutes = null): Builder
+    {
+        $freshMinutes ??= self::LIVE_GPS_FRESH_MINUTES;
+
+        return $query
+            ->where('approval_status', 'approved')
+            ->where('status', 'online')
+            ->whereNotNull('current_lat')
+            ->whereNotNull('current_lng')
+            ->where('location_updated_at', '>=', now()->subMinutes($freshMinutes));
     }
 }

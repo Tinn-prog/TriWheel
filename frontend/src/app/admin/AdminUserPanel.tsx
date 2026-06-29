@@ -1,16 +1,14 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { logoutTriWheel } from "@/lib/logout";
+import { LogoutConfirmButton } from "@/components/LogoutConfirmButton";
 import { useStoredTriWheelSession } from "./AdminAccessGate";
 
 export function AdminUserPanel() {
-  const router = useRouter();
   const { user } = useStoredTriWheelSession();
 
   function handleLogout() {
-    localStorage.removeItem("triwheel_user");
-    window.dispatchEvent(new Event("triwheel_user_change"));
-    router.replace("/login?role=passenger");
+    void logoutTriWheel();
   }
 
   return (
@@ -23,14 +21,12 @@ export function AdminUserPanel() {
       </div>
       <div className="mt-1 break-all text-xs text-slate-400">
         {user?.email ?? "admin account"}
+        {user?.admin_role ? ` • ${user.admin_role}` : ""}
       </div>
-      <button
+      <LogoutConfirmButton
         className="mt-4 w-full rounded-2xl bg-orange-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20 transition hover:bg-orange-600"
-        onClick={handleLogout}
-        type="button"
-      >
-        Logout
-      </button>
+        onConfirm={handleLogout}
+      />
     </div>
   );
 }

@@ -22,4 +22,13 @@ class RideOffer extends Model
     {
         return $this->belongsTo(Driver::class);
     }
+
+    public static function driverWithdrewFromRide(int $driverId, int $rideId): bool
+    {
+        return static::query()
+            ->where('ride_id', $rideId)
+            ->where('driver_id', $driverId)
+            ->where('status', 'cancelled')
+            ->exists();
+    }
 }

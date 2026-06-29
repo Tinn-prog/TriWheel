@@ -8,12 +8,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, \Illuminate\Notifications\Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -38,6 +38,16 @@ class User extends Authenticatable
         'submitted_at',
         'role',
         'is_verified',
+        'is_suspended',
+        'suspension_reason',
+        'suspended_at',
+        'suspension_appeal_deadline_at',
+        'suspension_appeal_message',
+        'suspension_appeal_submitted_at',
+        'suspension_requires_office_visit',
+        'account_permanently_closed_at',
+        'verification_rejection_reason',
+        'admin_role',
         'password',
     ];
 
@@ -62,6 +72,12 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'date_of_birth' => 'date',
             'is_verified' => 'boolean',
+            'is_suspended' => 'boolean',
+            'suspended_at' => 'datetime',
+            'suspension_appeal_deadline_at' => 'datetime',
+            'suspension_appeal_submitted_at' => 'datetime',
+            'suspension_requires_office_visit' => 'boolean',
+            'account_permanently_closed_at' => 'datetime',
             'safety_terms_accepted' => 'boolean',
             'submitted_at' => 'datetime',
             'password' => 'hashed',

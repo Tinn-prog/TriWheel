@@ -1,6 +1,6 @@
 "use client";
 
-import { apiRoutes } from "@/lib/api";
+import { apiFetch, apiRoutes } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useState } from "react";
@@ -9,12 +9,6 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const benefits = [
-    "Book tricycle rides faster",
-    "Track active ride status",
-    "View your ride history",
-    "Connect with verified drivers",
-  ];
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,19 +28,27 @@ export default function SignupPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(apiRoutes.passengerRegister, {
+      const response = await apiFetch(apiRoutes.passengerRegister, {
         method: "POST",
         body: formData,
       });
-      const data = (await response.json()) as { message?: string };
+      const data = (await response.json()) as {
+        message?: string;
+        errors?: Record<string, string[]>;
+      };
 
       if (!response.ok) {
-        throw new Error(data.message ?? "Unable to create passenger account.");
+        const firstValidationError = data.errors
+          ? Object.values(data.errors).flat()[0]
+          : null;
+        throw new Error(
+          firstValidationError ?? data.message ?? "Unable to create passenger account.",
+        );
       }
 
       setNotice(
         data.message ??
-          "Passenger account submitted successfully. Please wait for admin verification.",
+          "Passenger account created successfully. You can log in and book rides right away.",
       );
       form.reset();
     } catch (caughtError) {
@@ -61,7 +63,10 @@ export default function SignupPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_#ffedd5_0%,_#fb923c_34%,_#7c2d12_68%,_#1c0f08_100%)] px-4 py-6 text-slate-950 sm:px-6 sm:py-10">
+    <main
+      className="relative min-h-screen overflow-x-hidden px-4 py-6 text-white sm:px-6 sm:py-10"
+      style={{ background: "var(--auth-bg)" }}
+    >
       <Image
         alt=""
         aria-hidden="true"
@@ -71,11 +76,20 @@ export default function SignupPage() {
         src="/triwheel-brand-logo-v2.png"
         width={1024}
       />
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,_rgba(255,255,255,0.2),_rgba(255,255,255,0)_45%,_rgba(0,0,0,0.35))]" />
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,_rgba(255,255,255,0.06),_rgba(255,255,255,0)_40%,_rgba(0,0,0,0.55))]" />
 
-      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl items-center justify-center sm:min-h-[calc(100vh-5rem)]">
-        <div className="grid w-full overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-orange-950/35 ring-1 ring-white/30 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 p-5 text-white sm:p-12">
+      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col sm:min-h-[calc(100vh-5rem)]">
+        <Link
+          className="mb-4 inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-white/90 transition hover:text-white"
+          href="/"
+        >
+          <span aria-hidden="true">←</span>
+          Back to Home
+        </Link>
+
+        <div className="flex flex-1 items-center justify-center">
+        <div className="grid w-full overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-black/40 ring-1 ring-white/10 lg:grid-cols-[0.9fr_1.1fr]">
+          <section className="bg-gradient-to-br from-orange-700 via-orange-800 to-orange-950 p-5 text-white sm:p-12">
             <Link className="inline-flex items-center gap-3" href="/">
               <span className="relative h-12 w-24 overflow-hidden rounded-2xl bg-black shadow-lg shadow-orange-700/20">
                 <Image
@@ -90,49 +104,25 @@ export default function SignupPage() {
               <span className="text-2xl font-black">TriWheel</span>
             </Link>
 
-            <div className="mt-8 sm:mt-16">
-              <p className="text-sm font-bold uppercase tracking-[0.3em] text-orange-100">
+            <div className="mt-8 sm:mt-12">
+              <p className="text-sm font-bold uppercase tracking-[0.3em] text-orange-200/90">
                 Passenger registration
               </p>
               <h1 className="mt-4 text-3xl font-black leading-tight sm:text-4xl">
                 Create your passenger account.
               </h1>
-              <p className="mt-5 max-w-md text-orange-50">
-                Join TriWheel to book local rides, track requests, and manage
-                your ride history from one passenger dashboard.
+              <p className="mt-5 max-w-md text-orange-100/90">
+                Join TriWheel to book local rides. A profile photo and valid ID
+                are required when you sign up.
               </p>
-
-              <div className="mt-8 grid gap-3">
-                {benefits.map((benefit) => (
-                  <div
-                    className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 text-sm font-bold text-white"
-                    key={benefit}
-                  >
-                    <span className="grid size-6 place-items-center rounded-full bg-white text-xs text-orange-600">
-                      ✓
-                    </span>
-                    {benefit}
-                  </div>
-                ))}
-              </div>
             </div>
             </section>
 
-          <section className="p-5 text-slate-950 sm:p-12">
-            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="inline-flex w-fit rounded-full bg-orange-100 px-4 py-2 text-sm font-black text-orange-700">
-                Passenger account
-              </div>
-              <Link
-                className="inline-flex w-fit rounded-2xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 transition hover:border-orange-300 hover:text-orange-600"
-                href="/"
-              >
-                Back to Home
-              </Link>
-            </div>
-            <h2 className="text-3xl font-black">Passenger Registration</h2>
-            <p className="mt-2 text-slate-600">
-              Fill in your details to create a passenger profile.
+          <section className="bg-slate-50 p-5 text-slate-900 sm:p-10 lg:p-12">
+            <h2 className="text-2xl font-bold sm:text-3xl">Passenger Registration</h2>
+            <p className="mt-2 text-base leading-7 text-slate-700">
+              Fill in your details and upload a profile photo plus government ID
+              to create your account.
             </p>
 
             {error && (
@@ -334,8 +324,8 @@ export default function SignupPage() {
                   type="checkbox"
                   value="1"
                 />
-                I agree to TriWheel safety rules and consent to admin verification
-                of my submitted passenger identity details.
+                I agree to TriWheel safety rules and confirm that my profile
+                photo and government ID are accurate.
               </label>
 
               <button
@@ -368,6 +358,7 @@ export default function SignupPage() {
               </div>
             </form>
           </section>
+        </div>
         </div>
       </div>
     </main>

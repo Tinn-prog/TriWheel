@@ -1,8 +1,22 @@
 "use client";
 
 import { useStoredTriWheelSession } from "@/app/admin/AdminAccessGate";
+import { AppShell } from "@/components/AppShell";
+import { RideRatingFeedback, RideRatingForm } from "@/components/RideStarRating";
+import { RideReportDialog } from "@/components/RideReportDialog";
 import { TriWheelLoadingScreen } from "@/components/TriWheelLoadingScreen";
+import { useRideReport } from "@/hooks/useRideReport";
 import { apiRoutes } from "@/lib/api";
+import { logoutTriWheel } from "@/lib/logout";
+import { rideRatingVariant } from "@/lib/rideRatingCopy";
+import {
+  dismissRatingRide,
+  readDismissedRatingRideIds,
+} from "@/lib/rideFeedbackDismiss";
+import {
+  passengerReportReasons,
+  type PassengerReportReasonCode,
+} from "@/lib/rideReports";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
@@ -20,6 +34,7 @@ type Ride = {
   dropoff_address: string;
   ride_type: string | null;
   status: string;
+  is_emergency?: boolean;
   fare: number | null;
   created_at: string;
   driver_name: string | null;
@@ -33,6 +48,10 @@ type Ride = {
   driver_rating: string | null;
   driver_feedback: string | null;
   driver_rated: boolean;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
+  can_report?: boolean;
+  report_submitted?: boolean;
 };
 
 type PassengerOverview = {
@@ -43,6 +62,7 @@ type PassengerOverview = {
     active: number;
   };
   ride_history: Ride[];
+  hidden_history_count?: number;
 };
 
 function statusClass(status: string) {
@@ -61,17 +81,31 @@ function formatFare(fare: number | null) {
   return fare !== null ? `PHP ${fare.toFixed(2)}` : "Waiting for estimate";
 }
 
-const ratingOptions = [
-  { label: "5 - Good", value: "good" },
-  { label: "4 - Satisfied", value: "satisfied" },
-  { label: "3 - Neutral", value: "neutral" },
-  { label: "2 - Dissatisfied", value: "dissatisfied" },
-  { label: "1 - Very Dissatisfied", value: "very_dissatisfied" },
-];
-
-function ratingLabel(rating: string | null) {
-  return ratingOptions.find((option) => option.value === rating)?.label ?? "Not rated";
+function formatRideDate(value: string) {
+  return new Date(value).toLocaleString(undefined, {
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
+
+function formatVehicleSummary(ride: Ride) {
+  const parts = [ride.vehicle_type, ride.plate_number].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "No vehicle";
+}
+
+const passengerNavItems = [
+  {
+    href: "/passenger#book-ride",
+    isDefaultSection: true,
+    label: "Book Ride",
+    shortLabel: "Book",
+  },
+  { href: "/passenger#active-ride", label: "Active Ride", shortLabel: "Active" },
+  { href: "/passenger/history", label: "Ride History", shortLabel: "History" },
+  { href: "/settings", label: "Profile", shortLabel: "Profile" },
+];
 
 export default function PassengerHistoryPage() {
   const router = useRouter();
@@ -83,12 +117,11 @@ export default function PassengerHistoryPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [ratingRideId, setRatingRideId] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!isChecking && user?.role !== "passenger") {
-      router.replace("/login?role=passenger");
-    }
-  }, [isChecking, router, user]);
+  const [dismissedRatingRideIds, setDismissedRatingRideIds] = useState<number[]>(
+    [],
+  );
+  const [showReportDialog, setShowReportDialog] = useState(false);
+  const [reportRideId, setReportRideId] = useState<number | null>(null);
 
   const loadOverview = useCallback(async (userId: number) => {
     const response = await fetch(`${apiRoutes.passengerOverview}?user_id=${userId}`);
@@ -98,6 +131,27 @@ export default function PassengerHistoryPage() {
     }
 
     setOverview((await response.json()) as PassengerOverview);
+  }, []);
+
+  const {
+    error: reportError,
+    isSubmitting: isSubmittingReport,
+    submitReport,
+  } = useRideReport(user?.id, () => {
+    if (user) {
+      void loadOverview(user.id);
+    }
+    setNotice("Report submitted. TriWheel admins will review it.");
+  });
+
+  useEffect(() => {
+    if (!isChecking && user?.role !== "passenger") {
+      router.replace("/login?role=passenger");
+    }
+  }, [isChecking, router, user]);
+
+  useEffect(() => {
+    setDismissedRatingRideIds(readDismissedRatingRideIds());
   }, []);
 
   useEffect(() => {
@@ -122,7 +176,7 @@ export default function PassengerHistoryPage() {
     void loadHistory();
   }, [loadOverview, user]);
 
-  async function handleClearHistory() {
+  async function handleHistoryVisibility(action: "hide" | "unhide") {
     if (!user) {
       return;
     }
@@ -136,21 +190,33 @@ export default function PassengerHistoryPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ user_id: user.id }),
+        body: JSON.stringify({ user_id: user.id, action }),
       });
       const data = (await response.json()) as { message?: string };
 
       if (!response.ok) {
-        throw new Error(data.message ?? "Unable to hide ride history.");
+        throw new Error(
+          data.message ??
+            (action === "hide"
+              ? "Unable to hide ride history."
+              : "Unable to restore ride history."),
+        );
       }
 
-      setNotice(data.message ?? "Ride history hidden successfully.");
+      setNotice(
+        data.message ??
+          (action === "hide"
+            ? "Ride history hidden successfully."
+            : "Ride history restored successfully."),
+      );
       await loadOverview(user.id);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to hide ride history.",
+          : action === "hide"
+            ? "Unable to hide ride history."
+            : "Unable to restore ride history.",
       );
     }
   }
@@ -180,7 +246,7 @@ export default function PassengerHistoryPage() {
         },
         body: JSON.stringify({
           user_id: user.id,
-          rating: String(formData.get("rating") ?? ""),
+          rating: Number(formData.get("rating") ?? 0),
           feedback: String(formData.get("feedback") ?? ""),
         }),
       });
@@ -204,6 +270,10 @@ export default function PassengerHistoryPage() {
     }
   }
 
+  function handleLogout() {
+    void logoutTriWheel();
+  }
+
   if (isChecking || !user || (!overview && !error)) {
     return (
       <TriWheelLoadingScreen
@@ -213,8 +283,21 @@ export default function PassengerHistoryPage() {
     );
   }
 
+  const hasHiddenHistory = (overview?.hidden_history_count ?? 0) > 0;
+  const canHideHistory = Boolean(
+    overview?.ride_history.some((ride) =>
+      ["completed", "cancelled"].includes(ride.status),
+    ),
+  );
+
   return (
-    <main className="min-h-screen overflow-x-hidden bg-slate-100 px-4 py-5 text-slate-950 sm:px-6 sm:py-8">
+    <>
+    <AppShell
+      dashboardLabel="Passenger Dashboard"
+      navItems={passengerNavItems}
+      onLogout={handleLogout}
+      user={user}
+    >
       <section className="mx-auto w-full max-w-6xl min-w-0">
         <header className="rounded-[1.75rem] bg-gradient-to-br from-orange-500 via-orange-600 to-orange-800 p-5 text-white shadow-xl shadow-orange-200 sm:p-8">
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
@@ -231,7 +314,7 @@ export default function PassengerHistoryPage() {
               </p>
             </div>
             <Link
-              className="inline-flex w-fit rounded-2xl bg-white px-4 py-2.5 text-sm font-black text-orange-700 sm:px-5 sm:py-3"
+              className="tw-btn-secondary min-h-11 bg-white px-4 py-2.5 text-sm text-orange-700 hover:bg-white"
               href="/passenger"
             >
               Back to Dashboard
@@ -239,192 +322,198 @@ export default function PassengerHistoryPage() {
           </div>
         </header>
 
-        {error && (
-          <div className="mt-6 rounded-2xl bg-red-50 p-4 font-bold text-red-700">
-            {error}
-          </div>
-        )}
-        {notice && (
-          <div className="mt-6 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">
-            {notice}
-          </div>
-        )}
+        {error && <div className="tw-alert-error mt-6">{error}</div>}
+        {reportError && <div className="tw-alert-error mt-6">{reportError}</div>}
+        {notice && <div className="tw-alert-success mt-6">{notice}</div>}
 
-        <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="mt-4 grid grid-cols-4 divide-x divide-slate-200 overflow-hidden rounded-xl bg-white ring-1 ring-slate-200">
           {[
-            ["Total Rides", overview?.stats.total_rides ?? 0],
+            ["Total", overview?.stats.total_rides ?? 0],
             ["Active", overview?.stats.active ?? 0],
-            ["Completed", overview?.stats.completed ?? 0],
-            ["Cancelled", overview?.stats.cancelled ?? 0],
+            ["Complete", overview?.stats.completed ?? 0],
+            ["Cancel", overview?.stats.cancelled ?? 0],
           ].map(([label, value]) => (
-            <article
-              className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-slate-200"
-              key={label}
-            >
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+            <div className="min-w-0 px-1 py-2 text-center sm:px-2" key={label}>
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-500">
                 {label}
               </p>
-              <div className="mt-2 text-3xl font-black">{value}</div>
-            </article>
+              <p className="mt-0.5 text-lg font-black tabular-nums leading-none sm:text-xl">
+                {value}
+              </p>
+            </div>
           ))}
         </section>
 
-        <section className="mt-8 rounded-[2rem] bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <section className="mt-4 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200 sm:p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-2xl font-black">Trip Records</h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <h2 className="text-lg font-black">Trip Records</h2>
+              <p className="text-xs text-slate-500">
                 Completed and cancelled rides can be hidden from this page.
               </p>
             </div>
-            <button
-              className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!overview?.ride_history.some((ride) =>
-                ["completed", "cancelled"].includes(ride.status),
-              )}
-              onClick={handleClearHistory}
-              type="button"
-            >
-              Hide History
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canHideHistory}
+                onClick={() => void handleHistoryVisibility("hide")}
+                type="button"
+              >
+                Hide History
+              </button>
+              {hasHiddenHistory ? (
+                <button
+                  className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-700"
+                  onClick={() => void handleHistoryVisibility("unhide")}
+                  type="button"
+                >
+                  Unhide History
+                </button>
+              ) : null}
+            </div>
           </div>
 
-          <div className="mt-6 grid gap-4">
+          <div className="mt-3 grid gap-2">
             {overview?.ride_history.length ? (
               overview.ride_history.map((ride) => (
                 <article
-                  className="rounded-3xl border border-slate-100 bg-slate-50 p-5"
+                  className="rounded-lg border border-slate-100 bg-slate-50/80 p-3"
                   key={ride.id}
                 >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="font-black">Ride #{ride.id}</div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        {new Date(ride.created_at).toLocaleString()}
-                      </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800">
+                        Ride #{ride.id}
+                        <span className="ml-1.5 font-normal text-slate-400">
+                          {formatRideDate(ride.created_at)}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        {formatFare(ride.fare)} · {ride.driver_name ?? "No driver"} ·{" "}
+                        {formatVehicleSummary(ride)}
+                      </p>
                     </div>
                     <span
-                      className={`w-fit rounded-full px-3 py-1 text-xs font-black ${statusClass(
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${statusClass(
                         ride.status,
                       )}`}
                     >
                       {ride.status}
                     </span>
                   </div>
-                  <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                    <p>
-                      <span className="font-bold text-slate-500">Pickup:</span>{" "}
+                  <div className="mt-2 space-y-0.5 text-xs text-slate-600">
+                    <p className="line-clamp-1">
+                      <span className="font-semibold text-slate-400">From </span>
                       {ride.pickup_address}
                     </p>
-                    <p>
-                      <span className="font-bold text-slate-500">Drop-off:</span>{" "}
+                    <p className="line-clamp-1">
+                      <span className="font-semibold text-slate-400">To </span>
                       {ride.dropoff_address}
                     </p>
-                    <p>
-                      <span className="font-bold text-slate-500">Driver:</span>{" "}
-                      {ride.driver_name ?? "N/A"}
-                    </p>
-                    <p>
-                      <span className="font-bold text-slate-500">Vehicle:</span>{" "}
-                      {ride.vehicle_type ?? "N/A"}
-                      {ride.plate_number ? ` - ${ride.plate_number}` : ""}
-                    </p>
-                    <p>
-                      <span className="font-bold text-slate-500">Type:</span>{" "}
-                      {ride.ride_type ?? "standard"}
-                    </p>
-                    <p>
-                      <span className="font-bold text-slate-500">Fare:</span>{" "}
-                      {formatFare(ride.fare)}
-                    </p>
                   </div>
+                  {ride.status === "cancelled" && ride.cancellation_reason ? (
+                    <p className="mt-2 border-t border-slate-200/80 pt-2 text-xs text-slate-600">
+                      <span className="font-semibold text-slate-500">
+                        {ride.cancelled_by === "passenger"
+                          ? "You cancelled:"
+                          : ride.cancelled_by === "driver"
+                            ? "Driver cancelled:"
+                            : "Cancellation reason:"}
+                      </span>{" "}
+                      {ride.cancellation_reason}
+                    </p>
+                  ) : null}
+                  {ride.can_report ? (
+                    <button
+                      className="mt-2 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-black text-white disabled:opacity-50"
+                      disabled={isSubmittingReport}
+                      onClick={() => {
+                        setReportRideId(ride.id);
+                        setShowReportDialog(true);
+                      }}
+                      type="button"
+                    >
+                      Report Driver
+                    </button>
+                  ) : ride.report_submitted ? (
+                    <p className="mt-2 text-xs font-semibold text-amber-700">
+                      Report submitted for admin review.
+                    </p>
+                  ) : null}
                   {ride.status === "completed" && (
-                    <div className="mt-5 grid gap-4 rounded-3xl bg-white p-4">
-                      <div className="grid gap-3 text-sm md:grid-cols-2">
-                        <div className="rounded-2xl bg-orange-50 p-4">
-                          <p className="font-black text-orange-700">
-                            Your Driver Rating
-                          </p>
-                          <p className="mt-2 font-bold text-slate-600">
-                            {ratingLabel(ride.rating)}
-                          </p>
-                          {ride.passenger_feedback && (
-                            <p className="mt-2 text-slate-500">
-                              {ride.passenger_feedback}
-                            </p>
-                          )}
-                        </div>
-                        <div className="rounded-2xl bg-slate-50 p-4">
-                          <p className="font-black text-slate-700">
-                            Driver Feedback for You
-                          </p>
-                          <p className="mt-2 font-bold text-slate-600">
-                            {ratingLabel(ride.driver_rating)}
-                          </p>
-                          {ride.driver_feedback && (
-                            <p className="mt-2 text-slate-500">
-                              {ride.driver_feedback}
-                            </p>
-                          )}
-                        </div>
-                      </div>
+                    <div className="mt-2 space-y-1 border-t border-slate-200/80 pt-2">
+                      <RideRatingFeedback
+                        comment={ride.passenger_feedback}
+                        label="You:"
+                        rating={ride.rating}
+                        variant={rideRatingVariant(Boolean(ride.is_emergency))}
+                      />
+                      <RideRatingFeedback
+                        comment={ride.driver_feedback}
+                        label="Driver:"
+                        rating={ride.driver_rating}
+                        variant={rideRatingVariant(Boolean(ride.is_emergency))}
+                      />
 
-                      {!ride.passenger_rated && (
-                        <form
-                          className="grid gap-3 rounded-2xl border border-orange-100 bg-orange-50 p-4"
+                      {!ride.passenger_rated &&
+                      !dismissedRatingRideIds.includes(ride.id) ? (
+                        <RideRatingForm
+                          audience="passenger"
+                          compact
+                          isSubmitting={ratingRideId === ride.id}
+                          onCancel={() => {
+                            dismissRatingRide(ride.id);
+                            setDismissedRatingRideIds(readDismissedRatingRideIds());
+                          }}
                           onSubmit={(event) => handleRateDriver(event, ride.id)}
-                        >
-                          <div>
-                            <p className="font-black text-orange-800">
-                              Rate your driver
-                            </p>
-                            <p className="mt-1 text-sm text-orange-700">
-                              Share your experience to help improve TriWheel.
-                            </p>
-                          </div>
-                          <select
-                            className="rounded-2xl border border-orange-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-orange-400"
-                            name="rating"
-                            required
-                          >
-                            <option value="">Select rating</option>
-                            {ratingOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          <textarea
-                            className="min-h-24 rounded-2xl border border-orange-200 bg-white px-4 py-3 text-sm outline-none focus:border-orange-400"
-                            name="feedback"
-                            placeholder="Tell us about your ride. Optional."
-                          />
-                          <button
-                            className="w-fit rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-                            disabled={ratingRideId === ride.id}
-                            type="submit"
-                          >
-                            {ratingRideId === ride.id
-                              ? "Submitting..."
-                              : "Submit Driver Feedback"}
-                          </button>
-                        </form>
-                      )}
+                          variant={rideRatingVariant(Boolean(ride.is_emergency))}
+                        />
+                      ) : null}
                     </div>
                   )}
                 </article>
               ))
             ) : (
-              <div className="rounded-3xl bg-slate-50 p-8 text-center">
-                <p className="font-black">No ride history yet.</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Completed and cancelled rides will appear here.
+              <div className="rounded-lg bg-slate-50 p-6 text-center">
+                <p className="text-sm font-bold">
+                  {hasHiddenHistory ? "Ride history is hidden." : "No ride history yet."}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {hasHiddenHistory
+                    ? "Click Unhide History to show your completed and cancelled trips again."
+                    : "Completed and cancelled rides will appear here."}
                 </p>
               </div>
             )}
           </div>
         </section>
       </section>
-    </main>
+    </AppShell>
+
+    <RideReportDialog<PassengerReportReasonCode>
+      description="Tell TriWheel what happened. Reports are reviewed by admins."
+      detailPlaceholder="Describe the issue with this driver..."
+      isOpen={showReportDialog}
+      isSubmitting={isSubmittingReport}
+      onClose={() => {
+        setShowReportDialog(false);
+        setReportRideId(null);
+      }}
+      onConfirm={async (payload) => {
+        if (!reportRideId) {
+          return;
+        }
+
+        const succeeded = await submitReport(reportRideId, payload);
+
+        if (succeeded) {
+          setShowReportDialog(false);
+          setReportRideId(null);
+        }
+      }}
+      reasons={passengerReportReasons}
+      title="Report driver"
+    />
+    </>
   );
 }

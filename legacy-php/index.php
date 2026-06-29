@@ -223,7 +223,7 @@ if (isset($_SESSION['user_id'])) {
             </div>
             
             <div class="footer-bottom">
-                <p>&copy; 2024 TriWheel. All rights reserved.</p>
+                <p>&copy; 2026 TriWheel. All rights reserved.</p>
                 <div class="social-links">
                     <a href="https://www.facebook.com/profile.php?id=61586455232006"><i class="fab fa-facebook"></i></a>
                     <a href="#"><i class="fab fa-twitter"></i></a>

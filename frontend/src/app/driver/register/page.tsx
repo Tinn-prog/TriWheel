@@ -1,20 +1,38 @@
- "use client";
+"use client";
 
-import { apiRoutes } from "@/lib/api";
+import { apiFetch, apiRoutes } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+
+type ServiceZone = {
+  id: string;
+  name: string;
+  lgu: string;
+};
 
 export default function DriverRegisterPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const benefits = [
-    "Submit driver verification details",
-    "Register your vehicle information",
-    "Upload license and TODA ID documents",
-    "Wait for admin approval before accepting rides",
-  ];
+  const [serviceZones, setServiceZones] = useState<ServiceZone[]>([]);
+
+  useEffect(() => {
+    async function loadZones() {
+      try {
+        const response = await fetch(apiRoutes.serviceZones);
+        const data = (await response.json()) as { zones?: ServiceZone[] };
+
+        if (response.ok && data.zones) {
+          setServiceZones(data.zones);
+        }
+      } catch {
+        // Zones are optional at registration; admin can assign later.
+      }
+    }
+
+    void loadZones();
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,14 +52,22 @@ export default function DriverRegisterPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(apiRoutes.driverRegister, {
+      const response = await apiFetch(apiRoutes.driverRegister, {
         method: "POST",
         body: formData,
       });
-      const data = (await response.json()) as { message?: string };
+      const data = (await response.json()) as {
+        message?: string;
+        errors?: Record<string, string[]>;
+      };
 
       if (!response.ok) {
-        throw new Error(data.message ?? "Unable to submit driver application.");
+        const firstValidationError = data.errors
+          ? Object.values(data.errors).flat()[0]
+          : null;
+        throw new Error(
+          firstValidationError ?? data.message ?? "Unable to submit driver application.",
+        );
       }
 
       setNotice(
@@ -61,7 +87,10 @@ export default function DriverRegisterPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_#ffedd5_0%,_#fb923c_34%,_#7c2d12_68%,_#1c0f08_100%)] px-4 py-6 text-slate-950 sm:px-6 sm:py-10">
+    <main
+      className="relative min-h-screen overflow-x-hidden px-4 py-6 text-white sm:px-6 sm:py-10"
+      style={{ background: "var(--auth-bg)" }}
+    >
       <Image
         alt=""
         aria-hidden="true"
@@ -71,11 +100,20 @@ export default function DriverRegisterPage() {
         src="/triwheel-brand-logo-v2.png"
         width={1024}
       />
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,_rgba(255,255,255,0.2),_rgba(255,255,255,0)_45%,_rgba(0,0,0,0.35))]" />
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,_rgba(255,255,255,0.06),_rgba(255,255,255,0)_40%,_rgba(0,0,0,0.55))]" />
 
-      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl items-center justify-center sm:min-h-[calc(100vh-5rem)]">
-        <div className="grid w-full overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-orange-950/35 ring-1 ring-white/30 lg:grid-cols-[0.8fr_1.2fr]">
-          <section className="bg-gradient-to-br from-orange-500 via-orange-600 to-orange-700 p-5 text-white sm:p-12">
+      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl flex-col sm:min-h-[calc(100vh-5rem)]">
+        <Link
+          className="mb-4 inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-white/90 transition hover:text-white"
+          href="/"
+        >
+          <span aria-hidden="true">←</span>
+          Back to Home
+        </Link>
+
+        <div className="flex flex-1 items-center justify-center">
+        <div className="grid w-full overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-black/40 ring-1 ring-white/10 lg:grid-cols-[0.8fr_1.2fr]">
+          <section className="bg-gradient-to-br from-orange-700 via-orange-800 to-orange-950 p-5 text-white sm:p-12">
             <Link className="inline-flex items-center gap-3" href="/">
               <span className="relative h-12 w-24 overflow-hidden rounded-2xl bg-black shadow-lg shadow-orange-700/20">
                 <Image
@@ -90,48 +128,23 @@ export default function DriverRegisterPage() {
               <span className="text-2xl font-black">TriWheel</span>
             </Link>
 
-            <div className="mt-8 sm:mt-16">
-              <p className="text-sm font-bold uppercase tracking-[0.3em] text-orange-100">
+            <div className="mt-8 sm:mt-12">
+              <p className="text-sm font-bold uppercase tracking-[0.3em] text-orange-200/90">
                 Driver registration
               </p>
               <h1 className="mt-4 text-3xl font-black leading-tight sm:text-4xl">
                 Apply to drive with TriWheel.
               </h1>
-              <p className="mt-5 max-w-md text-orange-50">
+              <p className="mt-5 max-w-md text-orange-100/90">
                 Create a driver account and submit your documents for admin
                 verification before receiving ride requests.
               </p>
-
-              <div className="mt-8 grid gap-3">
-                {benefits.map((benefit) => (
-                  <div
-                    className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 text-sm font-bold text-white"
-                    key={benefit}
-                  >
-                    <span className="grid size-6 place-items-center rounded-full bg-white text-xs text-orange-600">
-                      ✓
-                    </span>
-                    {benefit}
-                  </div>
-                ))}
-              </div>
             </div>
           </section>
 
-          <section className="p-5 text-slate-950 sm:p-12 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto">
-            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="inline-flex w-fit rounded-full bg-orange-100 px-4 py-2 text-sm font-black text-orange-700">
-                Driver application
-              </div>
-              <Link
-                className="inline-flex w-fit rounded-2xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 transition hover:border-orange-300 hover:text-orange-600"
-                href="/"
-              >
-                Back to Home
-              </Link>
-            </div>
-            <h2 className="text-3xl font-black">Driver Registration</h2>
-            <p className="mt-2 text-slate-600">
+          <section className="bg-slate-50 p-5 text-slate-900 sm:p-10 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto lg:p-12">
+            <h2 className="text-2xl font-bold sm:text-3xl">Driver Registration</h2>
+            <p className="mt-2 text-base leading-7 text-slate-700">
               Complete your account, license, and vehicle details for review.
             </p>
 
@@ -406,6 +419,49 @@ export default function DriverRegisterPage() {
                   </label>
                 </div>
 
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <label className="grid gap-2 text-sm font-bold">
+                    LGU (city / municipality)
+                    <input
+                      className="rounded-2xl border border-slate-200 px-4 py-3 font-normal outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+                      name="lgu"
+                      placeholder="e.g. Quezon City, Manila"
+                      required
+                      type="text"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm font-bold">
+                    MTOP / franchise number
+                    <input
+                      className="rounded-2xl border border-slate-200 px-4 py-3 font-normal outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+                      name="mtop_number"
+                      placeholder="MTOP or franchise permit number"
+                      required
+                      type="text"
+                    />
+                  </label>
+                </div>
+
+                <label className="grid gap-2 text-sm font-bold">
+                  Service zone
+                  <select
+                    className="rounded-2xl border border-slate-200 px-4 py-3 font-normal outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+                    name="service_zone_id"
+                  >
+                    <option value="">Select zone (optional)</option>
+                    {serviceZones.map((zone) => (
+                      <option key={zone.id} value={zone.id}>
+                        {zone.name}
+                        {zone.lgu ? ` — ${zone.lgu}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs font-normal text-slate-500">
+                    Your MTOP zone determines where you can legally pick up passengers.
+                  </span>
+                </label>
+
                 <label className="grid gap-2 text-sm font-bold">
                   Franchise / route permit{" "}
                   <span className="font-normal text-slate-500">(optional if not applicable)</span>
@@ -582,6 +638,7 @@ export default function DriverRegisterPage() {
               </p>
             </form>
           </section>
+        </div>
         </div>
       </div>
     </main>

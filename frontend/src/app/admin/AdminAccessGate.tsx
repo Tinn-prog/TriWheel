@@ -4,9 +4,11 @@ import { useRouter } from "next/navigation";
 import { ReactNode, useEffect, useSyncExternalStore } from "react";
 
 type StoredUser = {
+  id: number;
   name: string;
   email: string;
   role: string;
+  admin_role?: string | null;
 };
 
 const serverSnapshot = "__triwheel_server_snapshot__";
@@ -76,7 +78,7 @@ export function AdminAccessGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isChecking && user?.role !== "admin") {
-      router.replace("/login?role=passenger");
+      router.replace("/login?role=admin");
     }
   }, [isChecking, router, user]);
 

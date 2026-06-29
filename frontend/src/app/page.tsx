@@ -330,7 +330,7 @@ export default function Home() {
 
         <div className="mx-auto mt-10 max-w-7xl border-t border-white/10 px-6 pt-6">
           <p className="text-sm text-slate-500">
-            Copyright 2024 TriWheel. All rights reserved.
+            Copyright 2026 TriWheel. All rights reserved.
           </p>
         </div>
       </footer>

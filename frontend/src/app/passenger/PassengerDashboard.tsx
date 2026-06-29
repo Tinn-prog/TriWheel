@@ -1,13 +1,49 @@
 "use client";
 
 import { useStoredTriWheelSession } from "@/app/admin/AdminAccessGate";
+import { AppShell } from "@/components/AppShell";
+import { NotificationBell } from "@/components/NotificationBell";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { RideCancelDialog } from "@/components/RideCancelDialog";
+import { RideReportDialog } from "@/components/RideReportDialog";
 import { TriWheelLoadingScreen } from "@/components/TriWheelLoadingScreen";
 import { apiRoutes } from "@/lib/api";
-import Link from "next/link";
+import { logoutTriWheel } from "@/lib/logout";
+import { DriverRatingSummary, RideRatingForm } from "@/components/RideStarRating";
+import { RideContactPanel } from "@/components/RideContactPanel";
+import {
+  getRideRatingCopy,
+  pickDriverRatingStats,
+  rideRatingVariant,
+} from "@/lib/rideRatingCopy";
+import { formatRideTypeLabel } from "@/lib/rideTypes";
+import {
+  dismissRatingRide,
+  readDismissedRatingRideIds,
+} from "@/lib/rideFeedbackDismiss";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import type { Point } from "./RideRequestMap";
+import type { PlaceSuggestion, Point } from "@/lib/mapTypes";
+import { PlaceSuggestionOption } from "@/components/PlaceSuggestionOption";
+import {
+  looksLikeCoordinates,
+  useGeocoder,
+} from "@/hooks/useGeocoder";
+import { useLiveDashboardRefresh } from "@/hooks/useLiveDashboardRefresh";
+import { useRideReport } from "@/hooks/useRideReport";
+import {
+  passengerCancelReasons,
+  type PassengerCancelReasonCode,
+} from "@/lib/rideCancellation";
+import {
+  passengerReportReasons,
+  type PassengerReportReasonCode,
+} from "@/lib/rideReports";
+import {
+  checkRideCompliance,
+  type ComplianceIssue,
+} from "@/lib/roadCompliance";
 
 const RideRequestMap = dynamic(
   () => import("./RideRequestMap").then((module) => module.RideRequestMap),
@@ -30,27 +66,37 @@ type StoredUser = {
   role: string;
 };
 
-type PlaceSuggestion = {
-  display_name: string;
-  lat: string;
-  lon: string;
-  place_id: number;
-};
-
 type Ride = {
   id: number;
   pickup_address: string;
   dropoff_address: string;
+  pickup_lat: number | null;
+  pickup_lng: number | null;
+  dropoff_lat: number | null;
+  dropoff_lng: number | null;
   ride_type: string | null;
   status: string;
+  is_emergency?: boolean;
   fare: number | null;
   created_at: string;
+  passenger_rated?: boolean;
   driver_name: string | null;
   driver_phone: string | null;
+  driver_average_rating?: number | null;
+  driver_rating_count?: number;
+  driver_emergency_average_rating?: number | null;
+  driver_emergency_rating_count?: number;
+  driver_lat: number | null;
+  driver_lng: number | null;
+  driver_location_updated_at: string | null;
   vehicle_type: string | null;
   plate_number: string | null;
   vehicle_color: string | null;
   offers: RideOffer[];
+  can_report?: boolean;
+  report_submitted?: boolean;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
 };
 
 type RideOffer = {
@@ -60,6 +106,10 @@ type RideOffer = {
   driver_name: string | null;
   driver_phone: string | null;
   driver_status: string | null;
+  driver_average_rating?: number | null;
+  driver_rating_count?: number;
+  driver_emergency_average_rating?: number | null;
+  driver_emergency_rating_count?: number;
   vehicle_type: string | null;
   plate_number: string | null;
   vehicle_color: string | null;
@@ -74,6 +124,7 @@ type PassengerOverview = {
     contact_number: string | null;
   };
   active_ride: Ride | null;
+  pending_rating_ride: Ride | null;
   ride_history: Ride[];
 };
 
@@ -100,21 +151,6 @@ function formatFare(fare: number | null) {
   return fare !== null ? `PHP ${fare.toFixed(2)}` : "Waiting for estimate";
 }
 
-const bookingSteps = [
-  {
-    label: "Set trip",
-    description: "Enter pickup, drop-off, and optional map pins.",
-  },
-  {
-    label: "Review offers",
-    description: "Nearby online drivers can send offers for your ride.",
-  },
-  {
-    label: "Choose driver",
-    description: "Pick the driver and vehicle that feels right.",
-  },
-];
-
 const rideProgress = [
   { key: "requested", label: "Finding offers" },
   { key: "accepted", label: "Driver matched" },
@@ -122,7 +158,7 @@ const rideProgress = [
   { key: "completed", label: "Completed" },
 ];
 
-function tripTrackingCopy(status: string, offerCount: number) {
+function tripTrackingCopy(status: string, offerCount: number, isEmergency = false) {
   if (status === "requested") {
     return {
       action: offerCount > 0 ? "Choose your driver" : "Wait for driver offers",
@@ -136,10 +172,11 @@ function tripTrackingCopy(status: string, offerCount: number) {
 
   if (status === "accepted") {
     return {
-      action: "Meet your driver at pickup",
-      description:
-        "Your selected driver has accepted the trip. Stay near the pickup point and keep your phone available.",
-      title: "Driver is assigned",
+      action: isEmergency ? "Emergency driver is on the way" : "Meet your driver at pickup",
+      description: isEmergency
+        ? "TriWheel assigned the nearest available tricycle or e-tricycle driver to your emergency request."
+        : "Your selected driver has accepted the trip. Stay near the pickup point and keep your phone available.",
+      title: isEmergency ? "Emergency driver assigned" : "Driver is assigned",
     };
   }
 
@@ -167,32 +204,17 @@ function tripTrackingCopy(status: string, offerCount: number) {
   };
 }
 
-async function searchPlaces(query: string, signal: AbortSignal) {
-  const normalizedQuery = query.trim();
-
-  if (normalizedQuery.length < 3) {
-    return [];
-  }
-
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=ph&q=${encodeURIComponent(
-      `${normalizedQuery}, Philippines`,
-    )}`,
-    { signal },
-  );
-
-  if (!response.ok) {
-    throw new Error("Unable to search places right now.");
-  }
-
-  return (await response.json()) as PlaceSuggestion[];
-}
-
 const passengerNavItems = [
-  { href: "/passenger#book-ride", label: "Book Ride" },
-  { href: "/passenger#active-ride", label: "Active Ride" },
-  { href: "/passenger/history", label: "Ride History" },
-  { href: "/settings", label: "Profile" },
+  {
+    href: "/passenger#book-ride",
+    isDefaultSection: true,
+    label: "Book Ride",
+    shortLabel: "Book",
+  },
+  { href: "/passenger#active-ride", label: "Active Ride", shortLabel: "Active" },
+  { href: "/passenger/notifications", label: "Notifications", shortLabel: "Alerts" },
+  { href: "/passenger/history", label: "Ride History", shortLabel: "History" },
+  { href: "/settings", label: "Profile", shortLabel: "Profile" },
 ];
 
 export function PassengerDashboard() {
@@ -205,8 +227,17 @@ export function PassengerDashboard() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isSubmittingRide, setIsSubmittingRide] = useState(false);
+  const [isSubmittingEmergency, setIsSubmittingEmergency] = useState(false);
+  const [showEmergencyConfirm, setShowEmergencyConfirm] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
+  const [reportRideId, setReportRideId] = useState<number | null>(null);
   const [isCancellingRide, setIsCancellingRide] = useState(false);
   const [choosingOfferId, setChoosingOfferId] = useState<number | null>(null);
+  const [ratingRideId, setRatingRideId] = useState<number | null>(null);
+  const [dismissedRatingRideIds, setDismissedRatingRideIds] = useState<number[]>(
+    [],
+  );
   const [rideType, setRideType] = useState("tricycle");
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropoffAddress, setDropoffAddress] = useState("");
@@ -219,6 +250,13 @@ export function PassengerDashboard() {
     PlaceSuggestion[]
   >([]);
   const [placeSearchStatus, setPlaceSearchStatus] = useState("");
+  const [complianceIssues, setComplianceIssues] = useState<ComplianceIssue[]>([]);
+  const {
+    isGeocoderReady,
+    resolvePlaceDetails,
+    reverseGeocode: geocodeAddress,
+    searchPlaces: searchLocations,
+  } = useGeocoder();
 
   useEffect(() => {
     if (!isChecking && user?.role !== "passenger") {
@@ -234,6 +272,42 @@ export function PassengerDashboard() {
     }
 
     setOverview((await response.json()) as PassengerOverview);
+  }, []);
+
+  const {
+    error: reportError,
+    isSubmitting: isSubmittingReport,
+    submitReport,
+  } = useRideReport(user?.id, () => {
+    if (user) {
+      void loadOverview(user.id);
+    }
+    setNotice("Report submitted. TriWheel admins will review it.");
+  });
+
+  const refreshDashboard = useCallback(async () => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      await loadOverview(user.id);
+    } catch {
+      // Keep the last good dashboard snapshot during background refresh.
+    }
+  }, [loadOverview, user]);
+
+  useLiveDashboardRefresh(
+    refreshDashboard,
+    Boolean(user),
+    overview?.active_ride?.status === "accepted" ||
+      overview?.active_ride?.status === "ongoing"
+      ? 5000
+      : 8000,
+  );
+
+  useEffect(() => {
+    setDismissedRatingRideIds(readDismissedRatingRideIds());
   }, []);
 
   useEffect(() => {
@@ -261,64 +335,78 @@ export function PassengerDashboard() {
   useEffect(() => {
     const query = pickupAddress.trim();
 
-    if (query.length < 3 || pickupPoint) {
+    if (query.length < 2 || pickupPoint || !isGeocoderReady) {
       return;
     }
 
-    const abortController = new AbortController();
     const timeout = window.setTimeout(async () => {
       try {
         setPlaceSearchStatus("Searching pickup suggestions...");
-        setPickupSuggestions(await searchPlaces(query, abortController.signal));
+        const result = await searchLocations(query);
+        setPickupSuggestions(result.suggestions);
         setPlaceSearchStatus("");
       } catch (caughtError) {
-        if (!abortController.signal.aborted) {
-          setPickupSuggestions([]);
-          setPlaceSearchStatus(
-            caughtError instanceof Error
-              ? caughtError.message
-              : "Unable to search pickup.",
-          );
-        }
+        setPickupSuggestions([]);
+        setPlaceSearchStatus(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to search pickup.",
+        );
       }
-    }, 450);
+    }, 350);
 
     return () => {
-      abortController.abort();
       window.clearTimeout(timeout);
     };
-  }, [pickupAddress, pickupPoint]);
+  }, [isGeocoderReady, pickupAddress, pickupPoint, searchLocations]);
+
+  useEffect(() => {
+    if (!pickupPoint || !isGeocoderReady || !looksLikeCoordinates(pickupAddress)) {
+      return;
+    }
+
+    void geocodeAddress(pickupPoint)
+      .then((address) => setPickupAddress(address))
+      .catch(() => undefined);
+  }, [geocodeAddress, isGeocoderReady, pickupAddress, pickupPoint]);
 
   useEffect(() => {
     const query = dropoffAddress.trim();
 
-    if (query.length < 3 || dropoffPoint) {
+    if (query.length < 2 || dropoffPoint || !isGeocoderReady) {
       return;
     }
 
-    const abortController = new AbortController();
     const timeout = window.setTimeout(async () => {
       try {
         setPlaceSearchStatus("Searching drop-off suggestions...");
-        setDropoffSuggestions(await searchPlaces(query, abortController.signal));
+        const result = await searchLocations(query);
+        setDropoffSuggestions(result.suggestions);
         setPlaceSearchStatus("");
       } catch (caughtError) {
-        if (!abortController.signal.aborted) {
-          setDropoffSuggestions([]);
-          setPlaceSearchStatus(
-            caughtError instanceof Error
-              ? caughtError.message
-              : "Unable to search drop-off.",
-          );
-        }
+        setDropoffSuggestions([]);
+        setPlaceSearchStatus(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to search drop-off.",
+        );
       }
-    }, 450);
+    }, 350);
 
     return () => {
-      abortController.abort();
       window.clearTimeout(timeout);
     };
-  }, [dropoffAddress, dropoffPoint]);
+  }, [dropoffAddress, dropoffPoint, isGeocoderReady, searchLocations]);
+
+  useEffect(() => {
+    if (!dropoffPoint || !isGeocoderReady || !looksLikeCoordinates(dropoffAddress)) {
+      return;
+    }
+
+    void geocodeAddress(dropoffPoint)
+      .then((address) => setDropoffAddress(address))
+      .catch(() => undefined);
+  }, [dropoffAddress, dropoffPoint, geocodeAddress, isGeocoderReady]);
 
   async function handleRideRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -329,22 +417,55 @@ export function PassengerDashboard() {
 
     setError("");
     setNotice("");
+    setComplianceIssues([]);
     setIsSubmittingRide(true);
 
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const rideTypeValue = rideType;
+    const pickupLat = formData.get("pickup_lat")
+      ? Number(formData.get("pickup_lat"))
+      : null;
+    const pickupLng = formData.get("pickup_lng")
+      ? Number(formData.get("pickup_lng"))
+      : null;
+    const dropoffLat = formData.get("dropoff_lat")
+      ? Number(formData.get("dropoff_lat"))
+      : null;
+    const dropoffLng = formData.get("dropoff_lng")
+      ? Number(formData.get("dropoff_lng"))
+      : null;
     const payload = {
       user_id: user.id,
       pickup_address: String(formData.get("pickup_address") ?? ""),
       dropoff_address: String(formData.get("dropoff_address") ?? ""),
-      ride_type: String(formData.get("ride_type") ?? "tricycle"),
-      pickup_lat: formData.get("pickup_lat") || null,
-      pickup_lng: formData.get("pickup_lng") || null,
-      dropoff_lat: formData.get("dropoff_lat") || null,
-      dropoff_lng: formData.get("dropoff_lng") || null,
+      ride_type: rideTypeValue,
+      pickup_lat: pickupPoint?.lat ?? pickupLat,
+      pickup_lng: pickupPoint?.lng ?? pickupLng,
+      dropoff_lat: dropoffPoint?.lat ?? dropoffLat,
+      dropoff_lng: dropoffPoint?.lng ?? dropoffLng,
     };
 
     try {
+      const compliance = await checkRideCompliance({
+        ride_type: rideTypeValue,
+        pickup_lat: payload.pickup_lat,
+        pickup_lng: payload.pickup_lng,
+        dropoff_lat: payload.dropoff_lat,
+        dropoff_lng: payload.dropoff_lng,
+      });
+
+      if (compliance.issues.length) {
+        setComplianceIssues(compliance.issues);
+      }
+
+      if (compliance.level === "block" || !compliance.allowed) {
+        throw new Error(
+          compliance.issues.map((issue) => issue.message).join(" ") ||
+            "This route is not allowed for the selected vehicle type.",
+        );
+      }
+
       const response = await fetch(apiRoutes.passengerRides, {
         method: "POST",
         headers: {
@@ -359,6 +480,7 @@ export function PassengerDashboard() {
       }
 
       setNotice(data.message ?? "Ride requested successfully.");
+      setComplianceIssues([]);
       form.reset();
       setPickupAddress("");
       setDropoffAddress("");
@@ -377,7 +499,131 @@ export function PassengerDashboard() {
     }
   }
 
-  async function handleCancelRide() {
+  async function resolveEmergencyPickupPoint(): Promise<Point | null> {
+    if (pickupPoint) {
+      return pickupPoint;
+    }
+
+    const query = pickupAddress.trim();
+
+    if (!query || !isGeocoderReady) {
+      return null;
+    }
+
+    try {
+      const result = await searchLocations(query);
+      const suggestion = result.suggestions[0];
+
+      if (!suggestion) {
+        return null;
+      }
+
+      if (suggestion.lat && suggestion.lon) {
+        const point = {
+          lat: Number(suggestion.lat),
+          lng: Number(suggestion.lon),
+        };
+        setPickupPoint(point);
+        return point;
+      }
+
+      const details = await resolvePlaceDetails(suggestion.place_id);
+      setPickupAddress(details.address);
+      setPickupPoint(details.point);
+      return details.point;
+    } catch {
+      return null;
+    }
+  }
+
+  async function openEmergencyConfirm() {
+    if (!pickupAddress.trim()) {
+      setError("Set your pickup location before requesting emergency help.");
+      return;
+    }
+
+    setError("");
+    setPlaceSearchStatus("Checking pickup location for emergency dispatch...");
+
+    const point = await resolveEmergencyPickupPoint();
+
+    setPlaceSearchStatus("");
+
+    if (!point) {
+      setError(
+        "Use your current location, pick a map pin, or choose a pickup suggestion so we can find the nearest driver.",
+      );
+      return;
+    }
+
+    setShowEmergencyConfirm(true);
+  }
+
+  async function handleEmergencyRequest() {
+    if (!user) {
+      return;
+    }
+
+    setError("");
+    setNotice("");
+    setIsSubmittingEmergency(true);
+
+    try {
+      const point = pickupPoint ?? (await resolveEmergencyPickupPoint());
+
+      if (!point) {
+        throw new Error("Pickup location is required for emergency dispatch.");
+      }
+
+      const response = await fetch(apiRoutes.passengerEmergencyRide, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          pickup_address: pickupAddress,
+          pickup_lat: point.lat,
+          pickup_lng: point.lng,
+          dropoff_address: dropoffAddress.trim() || pickupAddress,
+          dropoff_lat: dropoffPoint?.lat ?? point.lat,
+          dropoff_lng: dropoffPoint?.lng ?? point.lng,
+        }),
+      });
+      const data = (await response.json()) as {
+        message?: string;
+        errors?: Record<string, string[]>;
+      };
+
+      if (!response.ok) {
+        const validationMessage = data.errors
+          ? Object.values(data.errors).flat().join(" ")
+          : null;
+        throw new Error(
+          validationMessage ?? data.message ?? "Unable to dispatch emergency ride.",
+        );
+      }
+
+      setShowEmergencyConfirm(false);
+      setNotice(data.message ?? "Emergency ride dispatched.");
+      await loadOverview(user.id);
+      window.location.hash = "active-ride";
+    } catch (caughtError) {
+      setShowEmergencyConfirm(false);
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to dispatch emergency ride.",
+      );
+    } finally {
+      setIsSubmittingEmergency(false);
+    }
+  }
+
+  async function handleCancelRide(payload: {
+    cancellation_reason_code: PassengerCancelReasonCode;
+    cancellation_reason_detail?: string;
+  }) {
     if (!user || !overview?.active_ride) {
       return;
     }
@@ -392,7 +638,11 @@ export function PassengerDashboard() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ user_id: user.id }),
+        body: JSON.stringify({
+          user_id: user.id,
+          cancellation_reason_code: payload.cancellation_reason_code,
+          cancellation_reason_detail: payload.cancellation_reason_detail,
+        }),
       });
       const data = (await response.json()) as { message?: string };
 
@@ -400,6 +650,7 @@ export function PassengerDashboard() {
         throw new Error(data.message ?? "Unable to cancel ride.");
       }
 
+      setShowCancelDialog(false);
       setNotice(data.message ?? "Ride cancelled successfully.");
       await loadOverview(user.id);
     } catch (caughtError) {
@@ -410,6 +661,22 @@ export function PassengerDashboard() {
       );
     } finally {
       setIsCancellingRide(false);
+    }
+  }
+
+  async function handleReportRide(payload: {
+    report_reason_code: PassengerReportReasonCode;
+    report_reason_detail?: string;
+  }) {
+    if (!reportRideId) {
+      return;
+    }
+
+    const succeeded = await submitReport(reportRideId, payload);
+
+    if (succeeded) {
+      setShowReportDialog(false);
+      setReportRideId(null);
     }
   }
 
@@ -449,25 +716,103 @@ export function PassengerDashboard() {
     }
   }
 
-  function selectPickupSuggestion(suggestion: PlaceSuggestion) {
-    setPickupAddress(suggestion.display_name);
-    setPickupPoint({
-      lat: Number(suggestion.lat),
-      lng: Number(suggestion.lon),
-    });
+  async function selectPickupSuggestion(suggestion: PlaceSuggestion) {
     setPickupSuggestions([]);
-    setPlaceSearchStatus("");
+    setPlaceSearchStatus("Loading place details...");
+
+    try {
+      if (suggestion.lat && suggestion.lon) {
+        setPickupAddress(suggestion.display_name);
+        setPickupPoint({
+          lat: Number(suggestion.lat),
+          lng: Number(suggestion.lon),
+        });
+      } else {
+        const details = await resolvePlaceDetails(suggestion.place_id);
+        setPickupAddress(details.address);
+        setPickupPoint(details.point);
+      }
+
+      setPlaceSearchStatus("");
+    } catch (caughtError) {
+      setPlaceSearchStatus(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to load this pickup location.",
+      );
+    }
   }
 
-  function selectDropoffSuggestion(suggestion: PlaceSuggestion) {
-    setDropoffAddress(suggestion.display_name);
-    setDropoffPoint({
-      lat: Number(suggestion.lat),
-      lng: Number(suggestion.lon),
-    });
+  async function selectDropoffSuggestion(suggestion: PlaceSuggestion) {
     setDropoffSuggestions([]);
-    setPlaceSearchStatus("");
+    setPlaceSearchStatus("Loading place details...");
+
+    try {
+      if (suggestion.lat && suggestion.lon) {
+        setDropoffAddress(suggestion.display_name);
+        setDropoffPoint({
+          lat: Number(suggestion.lat),
+          lng: Number(suggestion.lon),
+        });
+      } else {
+        const details = await resolvePlaceDetails(suggestion.place_id);
+        setDropoffAddress(details.address);
+        setDropoffPoint(details.point);
+      }
+
+      setPlaceSearchStatus("");
+    } catch (caughtError) {
+      setPlaceSearchStatus(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to load this drop-off location.",
+      );
+    }
   }
+
+  const handleMapPickupSelect = useCallback(
+    async (point: Point) => {
+      setPickupPoint(point);
+      setPickupSuggestions([]);
+      setPickupAddress("Looking up address...");
+      setPlaceSearchStatus("Looking up pickup address...");
+
+      try {
+        setPickupAddress(await geocodeAddress(point));
+        setPlaceSearchStatus("");
+      } catch (caughtError) {
+        setPickupAddress("Looking up address...");
+        setPlaceSearchStatus(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to look up pickup address.",
+        );
+      }
+    },
+    [geocodeAddress],
+  );
+
+  const handleMapDropoffSelect = useCallback(
+    async (point: Point) => {
+      setDropoffPoint(point);
+      setDropoffSuggestions([]);
+      setDropoffAddress("Looking up address...");
+      setPlaceSearchStatus("Looking up drop-off address...");
+
+      try {
+        setDropoffAddress(await geocodeAddress(point));
+        setPlaceSearchStatus("");
+      } catch (caughtError) {
+        setDropoffAddress("Looking up address...");
+        setPlaceSearchStatus(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Unable to look up drop-off address.",
+        );
+      }
+    },
+    [geocodeAddress],
+  );
 
   function useCurrentLocationAsPickup() {
     if (!navigator.geolocation) {
@@ -478,13 +823,24 @@ export function PassengerDashboard() {
     setPlaceSearchStatus("Getting your current location...");
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setPickupPoint({
+        const point = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
-        });
-        setPickupAddress("Current location");
+        };
+
+        setPickupPoint(point);
         setPickupSuggestions([]);
-        setPlaceSearchStatus("");
+        setPlaceSearchStatus("Looking up pickup address...");
+
+        void geocodeAddress(point)
+          .then((address) => {
+            setPickupAddress(address);
+            setPlaceSearchStatus("");
+          })
+          .catch(() => {
+            setPickupAddress("Current location");
+            setPlaceSearchStatus("");
+          });
       },
       () => {
         setPlaceSearchStatus(
@@ -494,10 +850,63 @@ export function PassengerDashboard() {
     );
   }
 
+  async function handleRateDriver(
+    event: FormEvent<HTMLFormElement>,
+    rideId: number,
+  ) {
+    event.preventDefault();
+
+    if (!user) {
+      return;
+    }
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    setError("");
+    setNotice("");
+    setRatingRideId(rideId);
+
+    try {
+      const response = await fetch(apiRoutes.passengerRideRating(rideId), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          rating: Number(formData.get("rating") ?? 0),
+          feedback: String(formData.get("feedback") ?? ""),
+        }),
+      });
+      const data = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(data.message ?? "Unable to submit feedback.");
+      }
+
+      setNotice(data.message ?? "Thank you for your feedback!");
+      form.reset();
+      await loadOverview(user.id);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to submit feedback.",
+      );
+    } finally {
+      setRatingRideId(null);
+    }
+  }
+
+  function handleDismissRating(rideId: number) {
+    dismissRatingRide(rideId);
+    setDismissedRatingRideIds(readDismissedRatingRideIds());
+    setNotice("You can rate this trip later from Ride History.");
+  }
+
   function handleLogout() {
-    localStorage.removeItem("triwheel_user");
-    window.dispatchEvent(new Event("triwheel_user_change"));
-    router.replace("/login?role=passenger");
+    void logoutTriWheel();
   }
 
   if (isChecking || !user) {
@@ -519,72 +928,61 @@ export function PassengerDashboard() {
   }
 
   const activeRide = overview?.active_ride ?? null;
+  const pendingRatingRide = overview?.pending_rating_ride ?? null;
+  const showPendingRating =
+    pendingRatingRide &&
+    !pendingRatingRide.passenger_rated &&
+    !dismissedRatingRideIds.includes(pendingRatingRide.id);
   const hasActiveRide = Boolean(activeRide);
-  const canRequestRide = !hasActiveRide && !isSubmittingRide;
+  const canRequestRide = !hasActiveRide && !isSubmittingRide && !isSubmittingEmergency;
+  const hasEmergencyPickup =
+    Boolean(pickupPoint) || pickupAddress.trim().length >= 3;
+  const canRequestEmergency =
+    !hasActiveRide &&
+    !isSubmittingRide &&
+    !isSubmittingEmergency &&
+    hasEmergencyPickup;
   const pendingOfferCount = activeRide?.offers.length ?? 0;
   const activeTripTracking = activeRide
-    ? tripTrackingCopy(activeRide.status, pendingOfferCount)
+    ? tripTrackingCopy(activeRide.status, pendingOfferCount, Boolean(activeRide.is_emergency))
+    : null;
+  const activeDriverRating = activeRide ? pickDriverRatingStats(activeRide) : null;
+  const pendingRatingCopy = pendingRatingRide
+    ? getRideRatingCopy(
+        rideRatingVariant(Boolean(pendingRatingRide.is_emergency)),
+        "passenger",
+      )
     : null;
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-950">
-      <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-slate-200 bg-white p-6 lg:block">
-        <Link className="text-2xl font-black" href="/">
-          TriWheel
-        </Link>
-        <p className="mt-2 text-sm text-slate-500">Passenger Dashboard</p>
-
-        <nav className="mt-10 grid gap-3 text-sm font-bold">
-          {passengerNavItems.map((item) => (
-            <Link
-              className="rounded-2xl px-4 py-3 text-slate-600 transition hover:bg-orange-50 hover:text-orange-700"
-              href={item.href}
-              key={item.href}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="absolute bottom-6 left-6 right-6 rounded-3xl bg-slate-50 p-4">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-orange-600">
-            Signed in as
-          </p>
-          <div className="mt-3 font-black">{user.name}</div>
-          <div className="mt-1 break-all text-xs text-slate-500">
-            {user.email}
-          </div>
-          <button
-            className="mt-4 w-full rounded-2xl bg-orange-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-orange-500/20"
-            onClick={handleLogout}
-            type="button"
-          >
-            Logout
-          </button>
-        </div>
-      </aside>
-
-      <section className="w-full min-w-0 px-4 py-4 sm:px-6 sm:py-6 lg:ml-72 lg:w-auto">
-        <header className="overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-orange-500 via-orange-600 to-orange-800 p-5 text-white shadow-xl shadow-orange-200 sm:p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.28em] text-orange-100">
-            Passenger Dashboard
-          </p>
-          <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
-            <div>
-              <h1 className="text-3xl font-black leading-tight sm:text-4xl">
+    <AppShell
+      dashboardLabel="Passenger Dashboard"
+      navItems={passengerNavItems}
+      onLogout={handleLogout}
+      user={user}
+    >
+      <section className="w-full min-w-0">
+        <header className="rounded-[1.75rem] bg-gradient-to-br from-orange-500 via-orange-600 to-orange-800 p-5 text-white shadow-xl shadow-orange-200 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[0.28em] text-orange-100">
+                Passenger Dashboard
+              </p>
+              <h1 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">
                 Welcome, {overview?.passenger.name ?? user.name}.
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-orange-50">
                 Book a ride, compare driver offers, choose your driver, and
                 track your trip from one clean dashboard.
               </p>
+              <a
+                className="mt-4 inline-flex w-fit rounded-2xl bg-white px-4 py-2.5 text-sm font-black text-orange-700 shadow-lg shadow-orange-950/10"
+                href={hasActiveRide ? "#active-ride" : "#book-ride"}
+              >
+                {hasActiveRide ? "View Active Ride" : "Book a Ride"}
+              </a>
             </div>
-            <a
-              className="inline-flex w-fit rounded-2xl bg-white px-4 py-2.5 text-sm font-black text-orange-700 shadow-lg shadow-orange-950/10"
-              href={hasActiveRide ? "#active-ride" : "#book-ride"}
-            >
-              {hasActiveRide ? "View Active Ride" : "Book a Ride"}
-            </a>
+            <NotificationBell href="/passenger/notifications" userId={user.id} />
           </div>
           {activeRide && activeTripTracking ? (
             <div className="mt-5 rounded-3xl bg-white p-3 text-slate-950 shadow-xl shadow-orange-950/10">
@@ -638,33 +1036,12 @@ export function PassengerDashboard() {
                 })}
               </div>
             </div>
-          ) : (
-            <div className="mt-5 grid gap-2 rounded-3xl bg-white/10 p-2 backdrop-blur sm:grid-cols-3">
-              {bookingSteps.map((step, index) => (
-                <div className="rounded-2xl bg-white/10 p-3" key={step.label}>
-                  <div className="text-[0.7rem] font-black uppercase tracking-[0.2em] text-orange-100">
-                    Step {index + 1}
-                  </div>
-                  <div className="mt-1 text-sm font-black">{step.label}</div>
-                  <p className="mt-1 text-xs leading-5 text-orange-50">
-                    {step.description}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
+          ) : null}
         </header>
 
-        {error && (
-          <div className="mt-6 rounded-2xl bg-red-50 p-4 font-bold text-red-700">
-            {error}
-          </div>
-        )}
-        {notice && (
-          <div className="mt-6 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">
-            {notice}
-          </div>
-        )}
+        {error && <div className="tw-alert-error mt-6">{error}</div>}
+        {reportError && <div className="tw-alert-error mt-6">{reportError}</div>}
+        {notice && <div className="tw-alert-success mt-6">{notice}</div>}
 
         <section className="mt-6 grid min-w-0 gap-6">
           <article
@@ -677,10 +1054,6 @@ export function PassengerDashboard() {
                   Book now
                 </p>
                 <h2 className="mt-2 text-3xl font-black">Request a Ride</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Add the places, drop pins for better accuracy, then wait for
-                  driver offers before choosing who takes the trip.
-                </p>
               </div>
               <span className="w-fit rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-700">
                 {hasActiveRide ? "Ride active" : "Ready"}
@@ -695,11 +1068,11 @@ export function PassengerDashboard() {
             )}
 
             <form className="mt-6 grid gap-4" onSubmit={handleRideRequest}>
-              <fieldset
-                className="grid gap-4 disabled:opacity-60 xl:grid-cols-[0.85fr_1.15fr]"
-                disabled={!canRequestRide}
-              >
-                <div className="grid content-start gap-4">
+              <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+                <fieldset
+                  className="grid content-start gap-4 disabled:opacity-60"
+                  disabled={!canRequestRide}
+                >
                   <div className="grid gap-3 rounded-3xl bg-slate-50 p-4">
                     <label className="grid gap-2 text-sm font-bold">
                       Pickup location
@@ -710,8 +1083,10 @@ export function PassengerDashboard() {
                           const value = event.target.value;
 
                           setPickupAddress(value);
-                          setPickupPoint(null);
-                          if (value.trim().length < 3) {
+                          if (!value.trim()) {
+                            setPickupPoint(null);
+                          }
+                          if (value.trim().length < 2) {
                             setPickupSuggestions([]);
                           }
                         }}
@@ -730,14 +1105,11 @@ export function PassengerDashboard() {
                       {pickupSuggestions.length > 0 && (
                         <div className="grid gap-2 rounded-2xl border border-orange-100 bg-white p-2 shadow-lg shadow-orange-100">
                           {pickupSuggestions.map((suggestion) => (
-                            <button
-                              className="rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 transition hover:bg-orange-50 hover:text-orange-700"
+                            <PlaceSuggestionOption
                               key={suggestion.place_id}
-                              onClick={() => selectPickupSuggestion(suggestion)}
-                              type="button"
-                            >
-                              {suggestion.display_name}
-                            </button>
+                              onSelect={(item) => void selectPickupSuggestion(item)}
+                              suggestion={suggestion}
+                            />
                           ))}
                         </div>
                       )}
@@ -751,8 +1123,10 @@ export function PassengerDashboard() {
                           const value = event.target.value;
 
                           setDropoffAddress(value);
-                          setDropoffPoint(null);
-                          if (value.trim().length < 3) {
+                          if (!value.trim()) {
+                            setDropoffPoint(null);
+                          }
+                          if (value.trim().length < 2) {
                             setDropoffSuggestions([]);
                           }
                         }}
@@ -764,14 +1138,11 @@ export function PassengerDashboard() {
                       {dropoffSuggestions.length > 0 && (
                         <div className="grid gap-2 rounded-2xl border border-orange-100 bg-white p-2 shadow-lg shadow-orange-100">
                           {dropoffSuggestions.map((suggestion) => (
-                            <button
-                              className="rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 transition hover:bg-orange-50 hover:text-orange-700"
+                            <PlaceSuggestionOption
                               key={suggestion.place_id}
-                              onClick={() => selectDropoffSuggestion(suggestion)}
-                              type="button"
-                            >
-                              {suggestion.display_name}
-                            </button>
+                              onSelect={(item) => void selectDropoffSuggestion(item)}
+                              suggestion={suggestion}
+                            />
                           ))}
                         </div>
                       )}
@@ -796,6 +1167,23 @@ export function PassengerDashboard() {
                     </label>
                   </div>
 
+                  {complianceIssues.length > 0 ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                      <p className="font-black">Route compliance notice</p>
+                      <ul className="mt-2 list-disc space-y-1 pl-5">
+                        {complianceIssues.map((issue) => (
+                          <li key={issue.code}>{issue.message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+                      TriWheel routes follow LGU and national road rules. Tricycles
+                      and pedicabs should use local streets and the rightmost lane
+                      where allowed — major highways may be restricted.
+                    </p>
+                  )}
+
                   <button
                     className="rounded-2xl bg-slate-950 px-6 py-4 font-black text-white shadow-lg shadow-slate-300 transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                     disabled={!canRequestRide}
@@ -807,16 +1195,42 @@ export function PassengerDashboard() {
                         ? "Active Ride in Progress"
                         : "Find Drivers"}
                   </button>
-                </div>
+                </fieldset>
 
-                <RideRequestMap
-                  dropoffLabel={dropoffAddress}
-                  pickupLabel={pickupAddress}
-                  rideType={rideType}
-                  selectedDropoff={dropoffPoint}
-                  selectedPickup={pickupPoint}
-                />
-              </fieldset>
+                <div className="grid content-start gap-4">
+                  <RideRequestMap
+                    activeRide={overview?.active_ride ?? null}
+                    dropoffLabel={dropoffAddress}
+                    onDropoffSelect={handleMapDropoffSelect}
+                    onPickupSelect={handleMapPickupSelect}
+                    pickupLabel={pickupAddress}
+                    rideType={rideType}
+                    selectedDropoff={dropoffPoint}
+                    selectedPickup={pickupPoint}
+                  />
+
+                  <div className="rounded-3xl border border-red-100 bg-red-50/40 p-4">
+                    <button
+                      className="w-full rounded-2xl border border-red-200 bg-white px-6 py-4 font-black text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-red-100 disabled:bg-red-50/60 disabled:text-red-300"
+                      disabled={!canRequestEmergency}
+                      onClick={() => void openEmergencyConfirm()}
+                      type="button"
+                    >
+                      {isSubmittingEmergency ? "Dispatching..." : "Emergency Ride"}
+                    </button>
+                    <p className="mt-3 text-xs font-semibold leading-5 text-red-800/80">
+                      Emergency dispatch ignores your selected ride type and assigns
+                      the nearest online tricycle or e-tricycle driver who is not on
+                      another trip.
+                    </p>
+                    {!hasEmergencyPickup ? (
+                      <p className="mt-2 text-xs font-semibold text-red-700">
+                        Set a pickup location first to enable emergency dispatch.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </form>
           </article>
 
@@ -826,6 +1240,7 @@ export function PassengerDashboard() {
                 const tracking = tripTrackingCopy(
                   activeRide.status,
                   activeRide.offers.length,
+                  Boolean(activeRide.is_emergency),
                 );
 
                 return (
@@ -833,7 +1248,14 @@ export function PassengerDashboard() {
                     className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200"
                     id="active-ride"
                   >
-                    <h2 className="text-2xl font-black">Active Ride</h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-2xl font-black">Active Ride</h2>
+                      {activeRide.is_emergency ? (
+                        <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-red-700">
+                          Emergency
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="mt-6 overflow-hidden rounded-3xl bg-slate-950 text-white shadow-2xl shadow-slate-200">
                       <div className="bg-gradient-to-br from-orange-500 via-orange-600 to-orange-800 p-5">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -901,7 +1323,13 @@ export function PassengerDashboard() {
                           {activeRide.dropoff_address}
                         </p>
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="grid gap-3 sm:grid-cols-4">
+                        <div className="rounded-2xl bg-slate-50 p-4 text-sm">
+                          <p className="font-bold text-slate-500">Ride type</p>
+                          <p className="mt-1 font-black">
+                            {formatRideTypeLabel(activeRide.ride_type)}
+                          </p>
+                        </div>
                         <div className="rounded-2xl bg-orange-50 p-4 text-sm">
                           <p className="font-bold text-slate-500">Driver</p>
                           <p className="mt-1 font-black">
@@ -912,6 +1340,15 @@ export function PassengerDashboard() {
                               {activeRide.driver_phone}
                             </p>
                           )}
+                          {activeRide.driver_name ? (
+                            <div className="mt-2">
+                              <DriverRatingSummary
+                                average={activeDriverRating?.average ?? null}
+                                count={activeDriverRating?.count ?? 0}
+                                variant={activeDriverRating?.variant ?? "regular"}
+                              />
+                            </div>
+                          ) : null}
                         </div>
                         <div className="rounded-2xl bg-emerald-50 p-4 text-sm">
                           <p className="font-bold text-slate-500">Fare</p>
@@ -926,9 +1363,47 @@ export function PassengerDashboard() {
                           </p>
                         </div>
                       </div>
+                      {activeRide.driver_name &&
+                      ["accepted", "ongoing"].includes(activeRide.status) &&
+                      user ? (
+                        <div className="mt-4">
+                          <RideContactPanel
+                            contactName={activeRide.driver_name}
+                            contactPhone={activeRide.driver_phone}
+                            enabled
+                            rideId={activeRide.id}
+                            userId={user.id}
+                            viewerRole="passenger"
+                          />
+                        </div>
+                      ) : null}
+                      {activeRide.can_report ? (
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            className="rounded-2xl bg-amber-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-amber-500/20 disabled:cursor-not-allowed disabled:bg-slate-300"
+                            disabled={isSubmittingReport}
+                            onClick={() => {
+                              setReportRideId(activeRide.id);
+                              setShowReportDialog(true);
+                            }}
+                            type="button"
+                          >
+                            Report Driver
+                          </button>
+                        </div>
+                      ) : activeRide.report_submitted ? (
+                        <p className="mt-4 text-center text-sm font-semibold text-amber-700">
+                          Report submitted for admin review.
+                        </p>
+                      ) : null}
                     </div>
                     {activeRide.status === "requested" && (
                       <div className="m-5 mt-0 rounded-3xl bg-white p-4 text-slate-950">
+                        {activeRide.cancelled_by === "driver" && activeRide.cancellation_reason ? (
+                          <div className="mb-4 rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-900">
+                            Your previous driver cancelled ({activeRide.cancellation_reason}). We are finding another driver for you.
+                          </div>
+                        ) : null}
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div>
                             <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-600">
@@ -945,7 +1420,7 @@ export function PassengerDashboard() {
                           <button
                             className="w-fit rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                             disabled={isCancellingRide}
-                            onClick={handleCancelRide}
+                            onClick={() => setShowCancelDialog(true)}
                             type="button"
                           >
                             {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
@@ -967,6 +1442,13 @@ export function PassengerDashboard() {
                                     <div>
                                       <div className="font-black">
                                         {offer.driver_name ?? "Driver"}
+                                      </div>
+                                      <div className="mt-1">
+                                        <DriverRatingSummary
+                                          average={offer.driver_average_rating ?? null}
+                                          count={offer.driver_rating_count ?? 0}
+                                          variant="regular"
+                                        />
                                       </div>
                                       <div className="mt-1 text-sm text-slate-500">
                                         {offer.vehicle_type ?? "Vehicle"}{" "}
@@ -1017,13 +1499,122 @@ export function PassengerDashboard() {
                         </div>
                       </div>
                     )}
+                    {activeRide.is_emergency &&
+                      ["accepted", "requested"].includes(activeRide.status) && (
+                        <div className="m-5 mt-0 flex justify-end">
+                          <button
+                            className="rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                            disabled={isCancellingRide}
+                            onClick={() => setShowCancelDialog(true)}
+                            type="button"
+                          >
+                            {isCancellingRide ? "Cancelling..." : "Cancel Emergency Ride"}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </article>
                 );
               })()}
+
+          {showPendingRating && pendingRatingRide ? (
+            <article
+              className="mt-6 rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200"
+              id="ride-feedback"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p
+                    className={`text-sm font-bold uppercase tracking-[0.22em] ${
+                      pendingRatingRide.is_emergency ? "text-red-600" : "text-orange-600"
+                    }`}
+                  >
+                    {pendingRatingRide.is_emergency ? "Emergency trip completed" : "Trip completed"}
+                  </p>
+                  <h2 className="mt-2 text-2xl font-black text-slate-900">
+                    {pendingRatingCopy?.title ?? "How was your ride?"}
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Trip #{pendingRatingRide.id}
+                    {pendingRatingRide.driver_name
+                      ? ` with ${pendingRatingRide.driver_name}`
+                      : ""}
+                    . {pendingRatingCopy?.description}
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${
+                    pendingRatingRide.is_emergency
+                      ? "bg-red-100 text-red-700"
+                      : "bg-emerald-100 text-emerald-700"
+                  }`}
+                >
+                  {pendingRatingRide.is_emergency ? "Emergency" : "Completed"}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl bg-slate-50 p-4 text-sm">
+                  <p className="font-bold text-slate-500">Pickup</p>
+                  <p className="mt-1 font-black">{pendingRatingRide.pickup_address}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-4 text-sm">
+                  <p className="font-bold text-slate-500">Drop-off</p>
+                  <p className="mt-1 font-black">{pendingRatingRide.dropoff_address}</p>
+                </div>
+              </div>
+
+              <RideRatingForm
+                audience="passenger"
+                isSubmitting={ratingRideId === pendingRatingRide.id}
+                onCancel={() => handleDismissRating(pendingRatingRide.id)}
+                onSubmit={(event) =>
+                  void handleRateDriver(event, pendingRatingRide.id)
+                }
+                variant={rideRatingVariant(Boolean(pendingRatingRide.is_emergency))}
+              />
+            </article>
+          ) : null}
         </section>
 
       </section>
-    </main>
+
+      <ConfirmDialog
+        cancelLabel="Not now"
+        confirmLabel="Dispatch emergency ride"
+        description="TriWheel will immediately assign the nearest available tricycle or e-tricycle driver who is online and not on another trip."
+        isConfirming={isSubmittingEmergency}
+        onCancel={() => setShowEmergencyConfirm(false)}
+        onConfirm={() => void handleEmergencyRequest()}
+        open={showEmergencyConfirm}
+        title="Request emergency ride?"
+        tone="danger"
+      />
+
+      <RideCancelDialog<PassengerCancelReasonCode>
+        description="Choose a reason so nearby drivers know why this ride was cancelled."
+        detailPlaceholder="Tell the driver why you are cancelling..."
+        isOpen={showCancelDialog}
+        isSubmitting={isCancellingRide}
+        onClose={() => setShowCancelDialog(false)}
+        onConfirm={(payload) => void handleCancelRide(payload)}
+        reasons={passengerCancelReasons}
+        title="Why are you cancelling?"
+      />
+
+      <RideReportDialog<PassengerReportReasonCode>
+        description="Tell TriWheel what happened. Reports are reviewed by admins and are not shared directly with the driver."
+        detailPlaceholder="Describe the issue with this driver..."
+        isOpen={showReportDialog}
+        isSubmitting={isSubmittingReport}
+        onClose={() => {
+          setShowReportDialog(false);
+          setReportRideId(null);
+        }}
+        onConfirm={(payload) => void handleReportRide(payload)}
+        reasons={passengerReportReasons}
+        title="Report driver"
+      />
+    </AppShell>
   );
 }

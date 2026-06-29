@@ -20,6 +20,7 @@ class Ride extends Model
         'ride_type',
         'terminal',
         'status',
+        'is_emergency',
         'fare',
         'rating',
         'passenger_feedback',
@@ -32,6 +33,11 @@ class Ride extends Model
         'accepted_at',
         'started_at',
         'completed_at',
+        'cancelled_by',
+        'cancellation_reason_code',
+        'cancellation_reason',
+        'compliance_bypassed',
+        'compliance_issues',
     ];
 
     protected $casts = [
@@ -44,6 +50,9 @@ class Ride extends Model
         'driver_rated' => 'boolean',
         'hidden_for_passenger' => 'boolean',
         'hidden_for_driver' => 'boolean',
+        'is_emergency' => 'boolean',
+        'compliance_bypassed' => 'boolean',
+        'compliance_issues' => 'array',
         'accepted_at' => 'datetime',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
@@ -62,5 +71,10 @@ class Ride extends Model
     public function offers(): HasMany
     {
         return $this->hasMany(RideOffer::class);
+    }
+
+    public function messages(): HasMany
+    {
+        return $this->hasMany(RideMessage::class);
     }
 }
