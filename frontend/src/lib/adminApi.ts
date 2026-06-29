@@ -1,4 +1,5 @@
 import { apiFetch, apiRoutes, toApiUrl } from "./api";
+import { readStoredToken, readStoredUserRaw, updateStoredUser } from "./authStorage";
 
 type StoredAdminUser = {
   id: number;
@@ -12,7 +13,7 @@ function getStoredUser(): StoredAdminUser | null {
   }
 
   try {
-    const raw = localStorage.getItem("triwheel_user");
+    const raw = readStoredUserRaw();
     if (!raw) {
       return null;
     }
@@ -42,7 +43,7 @@ function getAuthHeaders(): HeadersInit {
     Accept: "application/json",
   };
 
-  const token = localStorage.getItem("triwheel_token");
+  const token = readStoredToken();
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -68,7 +69,7 @@ export function buildAdminUrl(path: string, params?: Record<string, string | boo
 export async function adminGet(path: string, params?: Record<string, string | boolean | undefined>) {
   const userId = getAdminUserId();
 
-  if (!userId && !localStorage.getItem("triwheel_token")) {
+  if (!userId && !readStoredToken()) {
     throw new Error("Admin session required.");
   }
 
@@ -81,7 +82,7 @@ export async function adminGet(path: string, params?: Record<string, string | bo
 export async function adminPatch(path: string, body: Record<string, unknown>) {
   const userId = getAdminUserId();
 
-  if (!userId && !localStorage.getItem("triwheel_token")) {
+  if (!userId && !readStoredToken()) {
     throw new Error("Admin session required.");
   }
 

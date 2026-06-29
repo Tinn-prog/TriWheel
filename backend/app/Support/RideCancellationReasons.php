@@ -11,6 +11,7 @@ class RideCancellationReasons
         'found_another_ride',
         'driver_unavailable',
         'booked_by_mistake',
+        'passenger_logged_out',
         'other',
     ];
 
@@ -36,6 +37,7 @@ class RideCancellationReasons
             'found_another_ride' => 'Found another ride',
             'driver_unavailable' => 'Driver was unavailable',
             'booked_by_mistake' => 'Booked by mistake',
+            'passenger_logged_out' => 'Passenger logged out',
             'other' => 'Other reason',
         ];
     }

@@ -1,14 +1,25 @@
 "use client";
 
 import { apiFetch, apiRoutes } from "@/lib/api";
+import {
+  TermsAcceptanceField,
+  TermsAndConditionsModal,
+} from "@/components/TermsAndConditions";
+import { PasswordRequirements } from "@/components/PasswordRequirements";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 export default function SignupPage() {
+  const router = useRouter();
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [hasViewedTerms, setHasViewedTerms] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -23,8 +34,12 @@ export default function SignupPage() {
       return;
     }
 
+    if (!termsAccepted) {
+      setError("Please read and accept the Terms and Conditions before creating your account.");
+      return;
+    }
+
     setError("");
-    setNotice("");
     setIsSubmitting(true);
 
     try {
@@ -46,11 +61,18 @@ export default function SignupPage() {
         );
       }
 
-      setNotice(
-        data.message ??
-          "Passenger account created successfully. You can log in and book rides right away.",
-      );
-      form.reset();
+      const email = String(formData.get("email") ?? "");
+      const params = new URLSearchParams({
+        role: "passenger",
+        registered: "1",
+        verify: "1",
+      });
+
+      if (email) {
+        params.set("email", email);
+      }
+
+      router.replace(`/login?${params.toString()}`);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -128,11 +150,6 @@ export default function SignupPage() {
             {error && (
               <div className="mt-6 rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-700">
                 {error}
-              </div>
-            )}
-            {notice && (
-              <div className="mt-6 rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-                {notice}
               </div>
             )}
 
@@ -297,11 +314,18 @@ export default function SignupPage() {
                   className="rounded-2xl border border-slate-200 px-4 py-3 font-normal outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                   minLength={6}
                   name="password"
-                  placeholder="Create a password, minimum 6 characters"
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Create your password"
                   required
                   type="password"
+                  value={password}
                 />
               </label>
+
+              <PasswordRequirements
+                confirmPassword={confirmPassword}
+                password={password}
+              />
 
               <label className="grid gap-2 text-sm font-bold">
                 Confirm password
@@ -310,11 +334,20 @@ export default function SignupPage() {
                   className="rounded-2xl border border-slate-200 px-4 py-3 font-normal outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                   minLength={6}
                   name="password_confirmation"
+                  onChange={(event) => setConfirmPassword(event.target.value)}
                   placeholder="Confirm your password"
                   required
                   type="password"
+                  value={confirmPassword}
                 />
               </label>
+
+              <TermsAcceptanceField
+                hasViewedTerms={hasViewedTerms}
+                onOpenTerms={() => setShowTerms(true)}
+                onTermsAcceptedChange={setTermsAccepted}
+                termsAccepted={termsAccepted}
+              />
 
               <label className="flex gap-3 rounded-2xl bg-slate-50 p-4 text-sm font-bold leading-6">
                 <input
@@ -330,7 +363,7 @@ export default function SignupPage() {
 
               <button
                 className="rounded-2xl bg-orange-500 px-6 py-4 font-black text-white shadow-xl shadow-orange-500/25 transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !termsAccepted}
                 type="submit"
               >
                 {isSubmitting ? "Creating Account..." : "Create Passenger Account"}
@@ -361,6 +394,14 @@ export default function SignupPage() {
         </div>
         </div>
       </div>
+
+      <TermsAndConditionsModal
+        onClose={() => {
+          setShowTerms(false);
+          setHasViewedTerms(true);
+        }}
+        open={showTerms}
+      />
     </main>
   );
 }

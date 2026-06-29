@@ -1,6 +1,7 @@
 "use client";
 
 import { apiFetch, apiRoutes } from "@/lib/api";
+import { PasswordRequirements } from "@/components/PasswordRequirements";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -101,6 +102,11 @@ function ResetPasswordForm() {
             </button>
           </div>
         </div>
+
+        <PasswordRequirements
+          confirmPassword={passwordConfirmation}
+          password={password}
+        />
 
         <div className="grid gap-2">
           <span className="text-sm font-bold text-slate-700">Confirm password</span>

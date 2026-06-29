@@ -6,8 +6,10 @@ import { passengerNavItems } from "@/app/passenger/passengerNav";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { LogoutConfirmButton } from "@/components/LogoutConfirmButton";
+import { PasswordRequirements } from "@/components/PasswordRequirements";
 import { TriWheelLoadingScreen } from "@/components/TriWheelLoadingScreen";
 import { apiFetch, apiRoutes, resolveMediaUrl, toApiUrl } from "@/lib/api";
+import { readStoredToken, updateStoredUser } from "@/lib/authStorage";
 import { logoutTriWheel } from "@/lib/logout";
 import {
   buildProfileChanges,
@@ -186,8 +188,8 @@ export default function SettingsPage() {
         const response = await apiFetch(
           toApiUrl(apiRoutes.accountProfile, { user_id: String(userId) }),
           {
-            headers: localStorage.getItem("triwheel_token")
-              ? { Authorization: `Bearer ${localStorage.getItem("triwheel_token")}` }
+            headers: readStoredToken()
+              ? { Authorization: `Bearer ${readStoredToken()}` }
               : undefined,
           },
         );
@@ -205,7 +207,7 @@ export default function SettingsPage() {
           profile: data.profile_change_limit ?? null,
           password: data.password_change_limit ?? null,
         });
-        localStorage.setItem("triwheel_user", JSON.stringify(data.user));
+        updateStoredUser(data.user);
         window.dispatchEvent(new Event("triwheel_user_change"));
       } catch {
         // Keep the last known profile snapshot when refresh fails.
@@ -260,7 +262,7 @@ export default function SettingsPage() {
     const previousPhotoUrl = profilePhotoUrl;
 
     try {
-      const token = localStorage.getItem("triwheel_token");
+      const token = readStoredToken();
       const payload: Record<string, string | number> = {
         user_id: user.id,
         first_name: firstName.trim(),
@@ -316,7 +318,7 @@ export default function SettingsPage() {
       }
 
       if (data.user) {
-        localStorage.setItem("triwheel_user", JSON.stringify(data.user));
+        updateStoredUser(data.user);
         window.dispatchEvent(new Event("triwheel_user_change"));
         applyProfile(data.user, { profile: data.profile_change_limit ?? null });
         handlePhotoChange(null);
@@ -348,7 +350,7 @@ export default function SettingsPage() {
     setIsSavingPassword(true);
 
     try {
-      const token = localStorage.getItem("triwheel_token");
+      const token = readStoredToken();
       const response = await apiFetch(apiRoutes.accountPassword, {
         method: "PATCH",
         headers: {
@@ -736,6 +738,12 @@ export default function SettingsPage() {
               />
             </label>
           </div>
+
+          <PasswordRequirements
+            confirmPassword={passwordConfirmation}
+            password={password}
+            tone="dark"
+          />
 
           <button
             className="mt-6 rounded-2xl bg-white px-6 py-4 text-sm font-black text-slate-950 disabled:bg-slate-600 disabled:text-slate-300"

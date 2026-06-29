@@ -7,6 +7,8 @@ type LoginPageProps = {
     email?: string | string[];
     password?: string | string[];
     role?: string | string[];
+    registered?: string | string[];
+    verify?: string | string[];
   }>;
 };
 
@@ -17,6 +19,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const passwordParam = Array.isArray(params.password)
     ? params.password[0]
     : params.password;
+  const registeredParam = Array.isArray(params.registered)
+    ? params.registered[0]
+    : params.registered;
+  const verifyParam = Array.isArray(params.verify) ? params.verify[0] : params.verify;
   const selectedRole =
     roleParam === "driver" ? "driver" : roleParam === "admin" ? "admin" : "passenger";
   const roleLabel =
@@ -35,6 +41,16 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     selectedRole === "driver" ? "/driver/register" : "/signup";
   const registerLabel =
     selectedRole === "driver" ? "Apply as Driver" : "Create an account";
+  const registrationNotice =
+    registeredParam === "1"
+      ? verifyParam === "1"
+        ? selectedRole === "driver"
+          ? "Driver application submitted. Check your email and verify your address before logging in."
+          : "Passenger account created. Check your email and verify your address before logging in."
+        : selectedRole === "driver"
+          ? "Driver application submitted successfully. Log in to check your application status."
+          : "Passenger account created successfully. You can log in and book rides right away."
+      : "";
 
   return (
     <main
@@ -101,6 +117,22 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
           <section className="bg-slate-50 p-5 text-slate-900 sm:p-10 lg:p-12">
             <h2 className="text-2xl font-bold sm:text-3xl">{roleLabel} Login</h2>
+
+            {registrationNotice ? (
+              <div className="mt-6 rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
+                {registrationNotice}
+                {verifyParam === "1" && emailParam ? (
+                  <p className="mt-2 font-semibold">
+                    <Link
+                      className="text-emerald-800 underline"
+                      href={`/verify-email?email=${encodeURIComponent(emailParam)}`}
+                    >
+                      Open email verification page
+                    </Link>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             <LoginForm
               defaultEmail={emailParam ?? ""}

@@ -1258,6 +1258,29 @@ export function PassengerDashboard() {
                         ? "Active Ride in Progress"
                         : "Find Drivers"}
                   </button>
+
+                  <div className="rounded-3xl border border-red-200 bg-gradient-to-br from-red-50/90 to-white p-4">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-red-600">
+                      Emergency dispatch
+                    </p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-red-900/80">
+                      Assigns the nearest online tricycle or e-tricycle driver who is
+                      not on another trip. Ignores your selected ride type.
+                    </p>
+                    {!hasEmergencyPickup ? (
+                      <p className="mt-2 text-xs font-semibold text-red-700">
+                        Set a pickup location first to enable emergency dispatch.
+                      </p>
+                    ) : null}
+                    <button
+                      className="mt-4 min-h-11 w-full rounded-2xl border border-red-300 bg-white px-6 py-3 text-sm font-black text-red-600 shadow-sm transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-red-100 disabled:bg-red-50/60 disabled:text-red-300"
+                      disabled={!canRequestEmergency}
+                      onClick={() => void openEmergencyConfirm()}
+                      type="button"
+                    >
+                      {isSubmittingEmergency ? "Dispatching..." : "Emergency Ride"}
+                    </button>
+                  </div>
                 </fieldset>
 
                 <div className="grid content-start gap-4">
@@ -1271,33 +1294,6 @@ export function PassengerDashboard() {
                     selectedDropoff={dropoffPoint}
                     selectedPickup={pickupPoint}
                   />
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-red-100 bg-gradient-to-br from-red-50/80 to-white p-4 sm:p-5">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-xs font-black uppercase tracking-[0.18em] text-red-600">
-                      Emergency dispatch
-                    </p>
-                    <p className="mt-2 text-sm font-semibold leading-6 text-red-900/80">
-                      Assigns the nearest online tricycle or e-tricycle driver who is
-                      not on another trip. Ignores your selected ride type.
-                    </p>
-                    {!hasEmergencyPickup ? (
-                      <p className="mt-2 text-xs font-semibold text-red-700">
-                        Set a pickup location first to enable emergency dispatch.
-                      </p>
-                    ) : null}
-                  </div>
-                  <button
-                    className="min-h-11 w-full shrink-0 rounded-2xl border border-red-200 bg-white px-6 py-3 text-sm font-black text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-red-100 disabled:bg-red-50/60 disabled:text-red-300 sm:w-auto sm:min-w-[12rem]"
-                    disabled={!canRequestEmergency}
-                    onClick={() => void openEmergencyConfirm()}
-                    type="button"
-                  >
-                    {isSubmittingEmergency ? "Dispatching..." : "Emergency Ride"}
-                  </button>
                 </div>
               </div>
             </form>
@@ -1572,6 +1568,7 @@ export function PassengerDashboard() {
                         </div>
                       </div>
                     )}
+                    </div>
                   </article>
                 );
               })()}

@@ -1,38 +1,25 @@
 "use client";
 
 import { apiFetch, apiRoutes } from "@/lib/api";
+import {
+  TermsAcceptanceField,
+  TermsAndConditionsModal,
+} from "@/components/TermsAndConditions";
+import { PasswordRequirements } from "@/components/PasswordRequirements";
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
-
-type ServiceZone = {
-  id: string;
-  name: string;
-  lgu: string;
-};
+import { useRouter } from "next/navigation";
+import { FormEvent, useState } from "react";
 
 export default function DriverRegisterPage() {
+  const router = useRouter();
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [serviceZones, setServiceZones] = useState<ServiceZone[]>([]);
-
-  useEffect(() => {
-    async function loadZones() {
-      try {
-        const response = await fetch(apiRoutes.serviceZones);
-        const data = (await response.json()) as { zones?: ServiceZone[] };
-
-        if (response.ok && data.zones) {
-          setServiceZones(data.zones);
-        }
-      } catch {
-        // Zones are optional at registration; admin can assign later.
-      }
-    }
-
-    void loadZones();
-  }, []);
+  const [showTerms, setShowTerms] = useState(false);
+  const [hasViewedTerms, setHasViewedTerms] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,8 +34,12 @@ export default function DriverRegisterPage() {
       return;
     }
 
+    if (!termsAccepted) {
+      setError("Please read and accept the Terms and Conditions before submitting your application.");
+      return;
+    }
+
     setError("");
-    setNotice("");
     setIsSubmitting(true);
 
     try {
@@ -70,11 +61,18 @@ export default function DriverRegisterPage() {
         );
       }
 
-      setNotice(
-        data.message ??
-          "Driver application submitted successfully. Please wait for admin approval.",
-      );
-      form.reset();
+      const email = String(formData.get("email") ?? "");
+      const params = new URLSearchParams({
+        role: "driver",
+        registered: "1",
+        verify: "1",
+      });
+
+      if (email) {
+        params.set("email", email);
+      }
+
+      router.replace(`/login?${params.toString()}`);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -153,11 +151,6 @@ export default function DriverRegisterPage() {
                 {error}
               </div>
             )}
-            {notice && (
-              <div className="mt-6 rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-                {notice}
-              </div>
-            )}
 
             <form className="mt-8 grid gap-6" onSubmit={handleSubmit}>
               <input name="role" type="hidden" value="driver" />
@@ -229,29 +222,40 @@ export default function DriverRegisterPage() {
                 </div>
 
                 <div className="grid gap-5 sm:grid-cols-2">
-                  <label className="grid gap-2 text-sm font-bold">
+                  <label className="grid gap-2 text-sm font-bold sm:col-span-2">
                     Password
                     <input
                       autoComplete="new-password"
                       className="rounded-2xl border border-slate-200 px-4 py-3 font-normal outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                       minLength={6}
                       name="password"
-                      placeholder="Minimum 6 characters"
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="Create your password"
                       required
                       type="password"
+                      value={password}
                     />
                   </label>
 
-                  <label className="grid gap-2 text-sm font-bold">
+                  <div className="sm:col-span-2">
+                    <PasswordRequirements
+                      confirmPassword={confirmPassword}
+                      password={password}
+                    />
+                  </div>
+
+                  <label className="grid gap-2 text-sm font-bold sm:col-span-2">
                     Confirm password
                     <input
                       autoComplete="new-password"
                       className="rounded-2xl border border-slate-200 px-4 py-3 font-normal outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                       minLength={6}
                       name="password_confirmation"
+                      onChange={(event) => setConfirmPassword(event.target.value)}
                       placeholder="Confirm your password"
                       required
                       type="password"
+                      value={confirmPassword}
                     />
                   </label>
                 </div>
@@ -444,25 +448,6 @@ export default function DriverRegisterPage() {
                 </div>
 
                 <label className="grid gap-2 text-sm font-bold">
-                  Service zone
-                  <select
-                    className="rounded-2xl border border-slate-200 px-4 py-3 font-normal outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-                    name="service_zone_id"
-                  >
-                    <option value="">Select zone (optional)</option>
-                    {serviceZones.map((zone) => (
-                      <option key={zone.id} value={zone.id}>
-                        {zone.name}
-                        {zone.lgu ? ` — ${zone.lgu}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-xs font-normal text-slate-500">
-                    Your MTOP zone determines where you can legally pick up passengers.
-                  </span>
-                </label>
-
-                <label className="grid gap-2 text-sm font-bold">
                   Franchise / route permit{" "}
                   <span className="font-normal text-slate-500">(optional if not applicable)</span>
                   <input
@@ -588,6 +573,13 @@ export default function DriverRegisterPage() {
                 </div>
               </fieldset>
 
+              <TermsAcceptanceField
+                hasViewedTerms={hasViewedTerms}
+                onOpenTerms={() => setShowTerms(true)}
+                onTermsAcceptedChange={setTermsAccepted}
+                termsAccepted={termsAccepted}
+              />
+
               <fieldset className="grid gap-4 border-t border-slate-100 pt-6">
                 <legend className="text-lg font-black">Safety Agreement</legend>
                 <label className="flex gap-3 rounded-2xl bg-slate-50 p-4 text-sm font-bold leading-6">
@@ -621,7 +613,7 @@ export default function DriverRegisterPage() {
 
               <button
                 className="rounded-2xl bg-orange-500 px-6 py-4 font-black text-white shadow-xl shadow-orange-500/25 transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !termsAccepted}
                 type="submit"
               >
                 {isSubmitting ? "Submitting Application..." : "Submit Driver Application"}
@@ -641,6 +633,14 @@ export default function DriverRegisterPage() {
         </div>
         </div>
       </div>
+
+      <TermsAndConditionsModal
+        onClose={() => {
+          setShowTerms(false);
+          setHasViewedTerms(true);
+        }}
+        open={showTerms}
+      />
     </main>
   );
 }

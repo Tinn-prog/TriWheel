@@ -1,6 +1,7 @@
 "use client";
 
 import { apiFetch, apiRoutes, toApiUrl } from "@/lib/api";
+import { resolveNotificationHref } from "@/lib/notificationNavigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -163,8 +164,10 @@ export function NotificationBell({
 
     setIsOpen(false);
 
-    if (notification.action_url?.startsWith("/")) {
-      router.push(notification.action_url);
+    const destination = resolveNotificationHref(notification.action_url, href);
+
+    if (destination) {
+      router.push(destination);
     }
   }
 

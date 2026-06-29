@@ -104,6 +104,8 @@ export const apiRoutes = {
   logout: `${API_URL}/logout`,
   forgotPassword: `${API_URL}/forgot-password`,
   resetPassword: `${API_URL}/reset-password`,
+  verifyEmail: `${API_URL}/email/verify`,
+  resendEmailVerification: `${API_URL}/email/resend-verification`,
   accountProfile: `${API_URL}/account/profile`,
   accountPassword: `${API_URL}/account/password`,
   adminDrivers: `${API_URL}/admin/drivers`,

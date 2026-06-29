@@ -1,6 +1,7 @@
 "use client";
 
 import { apiFetch, apiRoutes, toApiUrl } from "@/lib/api";
+import { resolveNotificationHref } from "@/lib/notificationNavigation";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -185,10 +186,15 @@ export function NotificationsPanel({
           );
 
           if (notification.action_url) {
+            const destination = resolveNotificationHref(
+              notification.action_url,
+              dashboardHref,
+            );
+
             return (
               <Link
                 className="block transition hover:opacity-95"
-                href={notification.action_url.startsWith("/") ? notification.action_url : dashboardHref}
+                href={destination ?? dashboardHref}
                 key={notification.id}
                 onClick={() => {
                   if (!notification.read_at) {

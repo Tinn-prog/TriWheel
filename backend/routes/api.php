@@ -42,6 +42,8 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+Route::post('/email/verify', [AuthController::class, 'verifyEmail']);
+Route::post('/email/resend-verification', [AuthController::class, 'resendEmailVerification']);
 Route::get('/account/profile', [AuthController::class, 'showProfile']);
 Route::post('/account/profile', [AuthController::class, 'updateProfile']);
 Route::patch('/account/profile', [AuthController::class, 'updateProfile']);

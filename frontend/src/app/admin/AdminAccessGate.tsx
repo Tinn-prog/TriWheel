@@ -1,5 +1,6 @@
 "use client";
 
+import { readStoredUserRaw } from "@/lib/authStorage";
 import { useRouter } from "next/navigation";
 import { ReactNode, useEffect, useSyncExternalStore } from "react";
 
@@ -21,7 +22,7 @@ function getStoredTriWheelUserValue(): string {
     return serverSnapshot;
   }
 
-  return localStorage.getItem("triwheel_user") ?? "";
+  return readStoredUserRaw();
 }
 
 export function parseStoredTriWheelUser(storedUser: string): StoredUser | null {

@@ -1,4 +1,9 @@
 import { apiFetch, apiRoutes } from "./api";
+import {
+  clearAuthSession,
+  readStoredToken,
+  readStoredUserRaw,
+} from "./authStorage";
 
 type StoredUser = {
   id: number;
@@ -18,8 +23,8 @@ export function loginRedirectForRole(role?: string) {
 }
 
 export async function logoutTriWheel(redirectTo?: string) {
-  const raw = localStorage.getItem("triwheel_user");
-  const token = localStorage.getItem("triwheel_token");
+  const raw = readStoredUserRaw();
+  const token = readStoredToken();
   let user: StoredUser | null = null;
 
   try {
@@ -43,8 +48,7 @@ export async function logoutTriWheel(redirectTo?: string) {
     }
   }
 
-  localStorage.removeItem("triwheel_user");
-  localStorage.removeItem("triwheel_token");
+  clearAuthSession();
   window.dispatchEvent(new Event("triwheel_user_change"));
 
   window.location.assign(redirectTo ?? loginRedirectForRole(user?.role));

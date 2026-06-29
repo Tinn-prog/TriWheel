@@ -4,14 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Mail\TriWheelAlertMail;
 use App\Models\Driver;
+use App\Models\Ride;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\PlatformSetting;
 use App\Services\DriverSuspensionService;
+use App\Services\EmailVerificationService;
 use App\Services\NotificationService;
 use App\Services\PasswordChangeLimitService;
 use App\Services\ProfileChangeLimitService;
 use App\Support\DocumentUrl;
+use App\Support\RideCancellationReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +31,7 @@ class AuthController extends Controller
         private readonly NotificationService $notifications,
         private readonly ProfileChangeLimitService $profileChangeLimits,
         private readonly PasswordChangeLimitService $passwordChangeLimits,
+        private readonly EmailVerificationService $emailVerification,
     ) {}
 
     public function registerPassenger(Request $request): JsonResponse
@@ -50,6 +54,7 @@ class AuthController extends Controller
             'government_id_type' => ['required', 'string', 'max:80'],
             'emergency_contact_name' => ['required', 'string', 'max:120'],
             'emergency_contact_number' => ['required', 'string', 'max:20'],
+            'terms_accepted' => ['accepted'],
             'safety_terms_accepted' => ['accepted'],
             'profile_photo' => ['required', 'file', 'mimes:jpg,jpeg,png', 'max:4096'],
             'government_id_file' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
@@ -75,6 +80,7 @@ class AuthController extends Controller
             'government_id_file' => $request->file('government_id_file')?->store('passenger-documents', 'public'),
             'emergency_contact_name' => $data['emergency_contact_name'],
             'emergency_contact_number' => $data['emergency_contact_number'],
+            'terms_accepted_at' => now(),
             'safety_terms_accepted' => true,
             'submitted_at' => now(),
             'role' => 'passenger',
@@ -82,12 +88,14 @@ class AuthController extends Controller
             'password' => $data['password'],
         ]);
 
+        $this->emailVerification->sendVerification($user);
+
         $this->notifications->notify(
             $user,
             'passenger.application_received',
             'Passenger account created',
             'Your TriWheel passenger account is ready. Log in to book rides on the platform.',
-            '/login?role=passenger',
+            '/passenger',
         );
 
         $admins = User::query()
@@ -104,7 +112,7 @@ class AuthController extends Controller
         );
 
         return response()->json([
-            'message' => 'Passenger account created successfully. You can log in and book rides right away.',
+            'message' => 'Passenger account created successfully. Please check your email to verify your address before logging in.',
             'user_id' => $user->id,
         ], 201);
     }
@@ -145,6 +153,7 @@ class AuthController extends Controller
             'registration_expiry_date' => ['required', 'date', 'after:today'],
             'background_check_consent' => ['accepted'],
             'platform_rules_accepted' => ['accepted'],
+            'terms_accepted' => ['accepted'],
             'profile_photo' => ['required', 'file', 'mimes:jpg,jpeg,png', 'max:4096'],
             'government_id_file' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
             'license_doc' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
@@ -170,6 +179,7 @@ class AuthController extends Controller
                 'contact_number' => $data['contact_number'],
                 'role' => 'driver',
                 'is_verified' => false,
+                'terms_accepted_at' => now(),
                 'password' => $data['password'],
             ]);
 
@@ -218,6 +228,8 @@ class AuthController extends Controller
         $driver->load('user');
 
         if ($driver->user) {
+            $this->emailVerification->sendVerification($driver->user);
+
             $this->notifications->notify(
                 $driver->user,
                 'driver.application_received',
@@ -244,7 +256,7 @@ class AuthController extends Controller
         );
 
         return response()->json([
-            'message' => 'Driver application submitted successfully. Please wait for admin approval. We will email you when your application is approved or rejected.',
+            'message' => 'Driver application submitted successfully. Please check your email to verify your address before logging in.',
             'driver_id' => $driver->id,
         ], 201);
     }
@@ -657,6 +669,44 @@ class AuthController extends Controller
         ]);
     }
 
+    public function verifyEmail(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'token' => ['required', 'string'],
+        ]);
+
+        $user = $this->emailVerification->verify($data['token']);
+
+        if (! $user) {
+            return response()->json([
+                'message' => 'This verification link is invalid or has expired. Please request a new verification email.',
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'Email verified successfully. You can now log in to TriWheel.',
+            'role' => $user->role,
+            'email' => $user->email,
+        ]);
+    }
+
+    public function resendEmailVerification(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+        ]);
+
+        $user = User::query()->where('email', $data['email'])->first();
+
+        if ($user && ! $user->email_verified_at) {
+            $this->emailVerification->sendVerification($user);
+        }
+
+        return response()->json([
+            'message' => 'If an unverified account exists for that email, a new verification link has been sent.',
+        ]);
+    }
+
     private function frontendUrl(string $path): string
     {
         $configured = trim(explode(',', (string) config('app.frontend_url', 'http://localhost:3000'))[0]);
@@ -669,6 +719,7 @@ class AuthController extends Controller
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
+            'remember' => ['sometimes', 'boolean'],
         ]);
 
         $user = User::query()
@@ -678,6 +729,12 @@ class AuthController extends Controller
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
+            ]);
+        }
+
+        if (! $user->email_verified_at) {
+            throw ValidationException::withMessages([
+                'email' => ['Please verify your email address before logging in. Check your inbox for the verification link.'],
             ]);
         }
 
@@ -693,7 +750,9 @@ class AuthController extends Controller
             $suspension = app(DriverSuspensionService::class)->suspensionState($user->refresh());
         }
 
-        $token = $user->createToken('triwheel-api')->plainTextToken;
+        $remember = (bool) ($credentials['remember'] ?? false);
+        $tokenExpiresAt = $remember ? now()->addDays(30) : now()->addHours(12);
+        $token = $user->createToken('triwheel-api', ['*'], $tokenExpiresAt)->plainTextToken;
 
         $redirectTo = match ($user->role) {
             'admin' => '/admin',
@@ -730,10 +789,76 @@ class AuthController extends Controller
             ]);
         }
 
+        if ($user->role === 'passenger') {
+            $this->cancelPassengerRideSearchesOnLogout($user);
+        }
+
         $user->tokens()->delete();
 
         return response()->json([
             'message' => 'Logged out successfully.',
         ]);
+    }
+
+    private function cancelPassengerRideSearchesOnLogout(User $user): void
+    {
+        $rides = Ride::query()
+            ->with(['driver.user:id,name', 'offers.driver.user:id,name', 'passenger:id,name'])
+            ->where('passenger_id', $user->id)
+            ->whereIn('status', ['requested', 'accepted'])
+            ->get();
+
+        if ($rides->isEmpty()) {
+            return;
+        }
+
+        $reasonMessage = RideCancellationReasons::resolveMessage('passenger_logged_out');
+
+        foreach ($rides as $ride) {
+            $assignedDriver = $ride->driver;
+            $passengerName = $ride->passenger?->name ?? 'A passenger';
+
+            $ride->update([
+                'status' => 'cancelled',
+                'cancelled_by' => 'passenger',
+                'cancellation_reason_code' => 'passenger_logged_out',
+                'cancellation_reason' => $reasonMessage,
+            ]);
+
+            $ride->offers()
+                ->whereIn('status', ['pending', 'accepted'])
+                ->update(['status' => 'cancelled']);
+
+            $notificationBody = "{$passengerName} cancelled ride #{$ride->id}. Reason: {$reasonMessage}";
+            $notifiedUserIds = [];
+
+            if ($assignedDriver?->user) {
+                $this->notifications->notify(
+                    $assignedDriver->user,
+                    'ride.cancelled',
+                    'Ride cancelled by passenger',
+                    $notificationBody,
+                    '/driver',
+                );
+                $notifiedUserIds[] = $assignedDriver->user->id;
+            }
+
+            foreach ($ride->offers as $offer) {
+                $driverUser = $offer->driver?->user;
+
+                if (! $driverUser || in_array($driverUser->id, $notifiedUserIds, true)) {
+                    continue;
+                }
+
+                $this->notifications->notify(
+                    $driverUser,
+                    'ride.cancelled',
+                    'Ride request cancelled',
+                    $notificationBody,
+                    '/driver',
+                );
+                $notifiedUserIds[] = $driverUser->id;
+            }
+        }
     }
 }
