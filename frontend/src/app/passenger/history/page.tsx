@@ -2,6 +2,7 @@
 
 import { useStoredTriWheelSession } from "@/app/admin/AdminAccessGate";
 import { AppShell } from "@/components/AppShell";
+import { passengerNavItems } from "@/app/passenger/passengerNav";
 import { RideRatingFeedback, RideRatingForm } from "@/components/RideStarRating";
 import { RideReportDialog } from "@/components/RideReportDialog";
 import { TriWheelLoadingScreen } from "@/components/TriWheelLoadingScreen";
@@ -94,18 +95,6 @@ function formatVehicleSummary(ride: Ride) {
   const parts = [ride.vehicle_type, ride.plate_number].filter(Boolean);
   return parts.length ? parts.join(" · ") : "No vehicle";
 }
-
-const passengerNavItems = [
-  {
-    href: "/passenger#book-ride",
-    isDefaultSection: true,
-    label: "Book Ride",
-    shortLabel: "Book",
-  },
-  { href: "/passenger#active-ride", label: "Active Ride", shortLabel: "Active" },
-  { href: "/passenger/history", label: "Ride History", shortLabel: "History" },
-  { href: "/settings", label: "Profile", shortLabel: "Profile" },
-];
 
 export default function PassengerHistoryPage() {
   const router = useRouter();

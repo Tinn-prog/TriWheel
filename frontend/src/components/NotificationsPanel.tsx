@@ -120,7 +120,7 @@ export function NotificationsPanel({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-100">
-              Alerts
+              Notifications
             </p>
             <h1 className="mt-2 text-3xl font-black sm:text-4xl">Notifications</h1>
             <p className="mt-2 text-sm leading-6 text-orange-50">

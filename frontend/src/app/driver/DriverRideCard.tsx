@@ -28,7 +28,7 @@ const DriverRouteMap = dynamic(
 );
 
 export const driverTripButtonClass =
-  "inline-flex min-h-9 w-full items-center justify-center rounded-lg px-3 py-1.5 text-[11px] font-black text-white sm:min-h-10 sm:text-xs";
+  "inline-flex min-h-11 w-full items-center justify-center rounded-xl px-3 py-2.5 text-xs font-black text-white sm:min-h-10 sm:rounded-lg sm:py-1.5 sm:text-[11px]";
 
 const driverTripNavButtonClass = `${driverTripButtonClass} bg-[#1a73e8] shadow-sm shadow-blue-200 transition hover:bg-[#1558b0]`;
 
@@ -159,7 +159,7 @@ export function DriverRideCard({
           />
         </div>
       )}
-      {inlineMap ? <div>{inlineMap}</div> : null}
+      {inlineMap ? <div className={embedded ? "order-2" : undefined}>{inlineMap}</div> : null}
       {showMap && pickupPoint && dropoffPoint && (
         <div className="mt-5">
           <DriverRouteMap
@@ -176,10 +176,10 @@ export function DriverRideCard({
       )}
       {embedded ? (
         navigationTarget || action || secondaryAction ? (
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="order-1 mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {navigationTarget ? (
               <a
-                className={`${driverTripNavButtonClass} col-span-2`}
+                className={`${driverTripNavButtonClass} sm:col-span-2`}
                 href={buildNavigationUrl(navigationTarget.point)}
                 rel="noopener noreferrer"
                 target="_blank"

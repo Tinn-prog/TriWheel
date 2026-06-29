@@ -2,18 +2,14 @@
 
 import { apiFetch, apiRoutes } from "@/lib/api";
 import { buildPhoneCallHref } from "@/lib/phoneCall";
+import {
+  formatChatExpiry,
+  type RideChatMessage,
+  type RideChatMeta,
+} from "@/lib/rideChat";
 import { useLiveDashboardRefresh } from "@/hooks/useLiveDashboardRefresh";
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-
-export type RideChatMessage = {
-  id: number;
-  ride_id: number;
-  sender_id: number;
-  sender_name: string;
-  sender_role: string | null;
-  body: string;
-  created_at: string | null;
-};
 
 type RideContactPanelProps = {
   rideId: number;
@@ -22,17 +18,20 @@ type RideContactPanelProps = {
   contactPhone: string | null;
   viewerRole: "passenger" | "driver";
   enabled?: boolean;
+  messagesHref?: string;
 };
 
 export function RideContactPanel({
   contactName,
   contactPhone,
   enabled = true,
+  messagesHref,
   rideId,
   userId,
   viewerRole,
 }: RideContactPanelProps) {
   const [messages, setMessages] = useState<RideChatMessage[]>([]);
+  const [chatMeta, setChatMeta] = useState<RideChatMeta | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -63,7 +62,14 @@ export function RideContactPanel({
         const response = await apiFetch(url.toString());
 
         if (!response.ok) {
-          const data = (await response.json()) as { message?: string };
+          const data = (await response.json()) as {
+            message?: string;
+            chat?: RideChatMeta;
+          };
+
+          if (data.chat) {
+            setChatMeta(data.chat);
+          }
 
           if (!options?.silent) {
             setError(data.message ?? "Unable to load chat messages.");
@@ -74,8 +80,13 @@ export function RideContactPanel({
 
         const data = (await response.json()) as {
           messages?: RideChatMessage[];
+          chat?: RideChatMeta;
         };
         const incoming = data.messages ?? [];
+
+        if (data.chat) {
+          setChatMeta(data.chat);
+        }
 
         if (options?.silent && lastMessageId) {
           if (incoming.length > 0) {
@@ -101,6 +112,7 @@ export function RideContactPanel({
 
   useEffect(() => {
     setMessages([]);
+    setChatMeta(null);
     setDraft("");
     setError(null);
     setIsLoading(true);
@@ -112,7 +124,7 @@ export function RideContactPanel({
 
   useLiveDashboardRefresh(
     () => loadMessages({ silent: true }),
-    enabled,
+    enabled && Boolean(chatMeta?.can_read),
     4000,
   );
 
@@ -125,7 +137,7 @@ export function RideContactPanel({
 
     const body = draft.trim();
 
-    if (!body || isSending) {
+    if (!body || isSending || !chatMeta?.can_send) {
       return;
     }
 
@@ -147,10 +159,15 @@ export function RideContactPanel({
       const data = (await response.json()) as {
         message?: string;
         chat_message?: RideChatMessage;
+        chat?: RideChatMeta;
       };
 
       if (!response.ok) {
         throw new Error(data.message ?? "Unable to send message.");
+      }
+
+      if (data.chat) {
+        setChatMeta(data.chat);
       }
 
       if (data.chat_message) {
@@ -172,6 +189,7 @@ export function RideContactPanel({
   }
 
   const otherRoleLabel = viewerRole === "passenger" ? "driver" : "passenger";
+  const chatClosed = chatMeta ? !chatMeta.can_send : false;
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
@@ -187,24 +205,60 @@ export function RideContactPanel({
             </p>
           ) : null}
         </div>
-        {callHref ? (
-          <a
-            className="inline-flex min-h-10 items-center justify-center rounded-2xl bg-emerald-500 px-4 py-2 text-xs font-black text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-600 sm:text-sm"
-            href={callHref}
-          >
-            Call {otherRoleLabel}
-          </a>
-        ) : (
-          <span className="rounded-2xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-500">
-            Phone unavailable
-          </span>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {messagesHref ? (
+            <Link
+              className="inline-flex min-h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700 sm:text-sm"
+              href={messagesHref}
+            >
+              All messages
+            </Link>
+          ) : null}
+          {callHref ? (
+            <a
+              className="inline-flex min-h-10 items-center justify-center rounded-2xl bg-emerald-500 px-4 py-2 text-xs font-black text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-600 sm:text-sm"
+              href={callHref}
+            >
+              Call {otherRoleLabel}
+            </a>
+          ) : (
+            <span className="rounded-2xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-500">
+              Phone unavailable
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 rounded-2xl bg-slate-50 p-3">
-        <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">
-          Live chat
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+            Private trip chat
+          </p>
+          {chatMeta ? (
+            <span
+              className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${
+                chatMeta.can_send
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-slate-200 text-slate-600"
+              }`}
+            >
+              {chatMeta.can_send ? "Open" : "Closed"}
+            </span>
+          ) : null}
+        </div>
+
+        {chatMeta?.expires_at ? (
+          <p className="mt-2 text-xs font-semibold text-slate-500">
+            {chatMeta.can_send
+              ? `This chat closes ${formatChatExpiry(chatMeta.expires_at)}. Only you and your ${otherRoleLabel} can see these messages.`
+              : "This 24-hour trip chat has ended."}
+          </p>
+        ) : (
+          <p className="mt-2 text-xs font-semibold text-slate-500">
+            Only the passenger and assigned driver can message each other here.
+          </p>
+        )}
+
         <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
           {isLoading ? (
             <p className="py-6 text-center text-sm font-semibold text-slate-500">
@@ -258,23 +312,29 @@ export function RideContactPanel({
           <div ref={messagesEndRef} />
         </div>
 
-        <form className="mt-3 flex gap-2" onSubmit={handleSubmit}>
-          <input
-            className="min-h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none ring-orange-500 transition focus:ring-2"
-            disabled={isSending}
-            maxLength={1000}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Type a message..."
-            value={draft}
-          />
-          <button
-            className="min-h-11 rounded-2xl bg-orange-500 px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300 sm:text-sm"
-            disabled={isSending || draft.trim() === ""}
-            type="submit"
-          >
-            {isSending ? "Sending..." : "Send"}
-          </button>
-        </form>
+        {chatClosed ? (
+          <p className="mt-3 rounded-2xl bg-slate-200/70 px-4 py-3 text-sm font-semibold text-slate-700">
+            Messaging is closed for this trip.
+          </p>
+        ) : (
+          <form className="mt-3 flex gap-2" onSubmit={handleSubmit}>
+            <input
+              className="min-h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none ring-orange-500 transition focus:ring-2"
+              disabled={isSending || !chatMeta?.can_send}
+              maxLength={1000}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Type a message..."
+              value={draft}
+            />
+            <button
+              className="min-h-11 rounded-2xl bg-orange-500 px-4 text-xs font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300 sm:text-sm"
+              disabled={isSending || draft.trim() === "" || !chatMeta?.can_send}
+              type="submit"
+            >
+              {isSending ? "Sending..." : "Send"}
+            </button>
+          </form>
+        )}
 
         {error ? (
           <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>

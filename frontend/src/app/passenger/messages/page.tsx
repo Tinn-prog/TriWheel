@@ -1,16 +1,20 @@
 "use client";
 
+import { Suspense } from "react";
 import { useStoredTriWheelSession } from "@/app/admin/AdminAccessGate";
 import { AppShell } from "@/components/AppShell";
+import { RideMessagesDashboard } from "@/components/RideMessagesDashboard";
 import { passengerNavItems } from "@/app/passenger/passengerNav";
-import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { TriWheelLoadingScreen } from "@/components/TriWheelLoadingScreen";
 import { logoutTriWheel } from "@/lib/logout";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 
-export default function PassengerNotificationsPage() {
+function PassengerMessagesContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rideParam = searchParams.get("ride");
+  const initialRideId = rideParam ? Number(rideParam) : null;
   const { isChecking, user } = useStoredTriWheelSession();
 
   useEffect(() => {
@@ -26,8 +30,8 @@ export default function PassengerNotificationsPage() {
   if (isChecking || !user || user.role !== "passenger") {
     return (
       <TriWheelLoadingScreen
-        message="Loading your notifications."
-        title="Passenger Notifications"
+        message="Loading your trip messages."
+        title="Passenger Messages"
       />
     );
   }
@@ -39,11 +43,27 @@ export default function PassengerNotificationsPage() {
       onLogout={handleLogout}
       user={user}
     >
-      <NotificationsPanel
+      <RideMessagesDashboard
         backHref="/passenger"
-        dashboardHref="/passenger"
+        initialRideId={Number.isFinite(initialRideId) ? initialRideId : null}
         userId={user.id}
+        viewerRole="passenger"
       />
     </AppShell>
+  );
+}
+
+export default function PassengerMessagesPage() {
+  return (
+    <Suspense
+      fallback={
+        <TriWheelLoadingScreen
+          message="Loading your trip messages."
+          title="Passenger Messages"
+        />
+      }
+    >
+      <PassengerMessagesContent />
+    </Suspense>
   );
 }

@@ -52,7 +52,7 @@ export function RideCancelDialog<TCode extends CancelReasonCode>({
   const canConfirm = !needsDetail || reasonDetail.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 p-4">
+    <div className="fixed inset-0 z-[1200] overflow-y-auto bg-slate-950/70 p-4">
       <div className="flex min-h-full items-center justify-center">
         <div
           aria-modal="true"

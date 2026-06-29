@@ -430,7 +430,7 @@ export default function DriverStatusPage() {
                         ) : undefined}
                         {activeRide.can_report ? (
                           <button
-                            className={`${driverTripButtonClass} col-span-2 bg-amber-500`}
+                            className={`${driverTripButtonClass} bg-amber-500 sm:col-span-2`}
                             disabled={isSubmittingReport}
                             onClick={() => openReportDialog(activeRide.id)}
                             type="button"
@@ -438,7 +438,7 @@ export default function DriverStatusPage() {
                             Report Passenger
                           </button>
                         ) : activeRide.report_submitted ? (
-                          <p className="col-span-2 rounded-lg bg-amber-50 px-3 py-2 text-center text-[11px] font-semibold text-amber-800">
+                          <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-[11px] font-semibold text-amber-800 sm:col-span-2">
                             Report submitted for admin review.
                           </p>
                         ) : null}
@@ -450,6 +450,7 @@ export default function DriverStatusPage() {
                       contactName={activeRide.passenger_name ?? "Passenger"}
                       contactPhone={activeRide.passenger_phone}
                       enabled
+                      messagesHref={`/driver/messages?ride=${activeRide.id}`}
                       rideId={activeRide.id}
                       userId={user.id}
                       viewerRole="driver"
@@ -501,6 +502,52 @@ export default function DriverStatusPage() {
           </>
         )}
       </section>
+
+      {hasActiveTrip && activeRide ? (
+        <div className="tw-driver-trip-bar fixed inset-x-0 z-[1050] border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.12)] backdrop-blur-md lg:hidden">
+          <div className="mx-auto grid w-full max-w-6xl gap-2">
+            {activeRide.status === "accepted" ? (
+              <button
+                className={`${driverTripButtonClass} bg-orange-500`}
+                onClick={() =>
+                  runDriverAction(
+                    `start-${activeRide.id}`,
+                    apiRoutes.driverRideStart(activeRide.id),
+                    "Ride started successfully.",
+                  )
+                }
+                type="button"
+              >
+                Start Ride
+              </button>
+            ) : activeRide.status === "ongoing" ? (
+              <button
+                className={`${driverTripButtonClass} bg-emerald-500`}
+                onClick={() =>
+                  runDriverAction(
+                    `complete-${activeRide.id}`,
+                    apiRoutes.driverRideComplete(activeRide.id),
+                    "Ride completed successfully.",
+                  )
+                }
+                type="button"
+              >
+                Complete Ride
+              </button>
+            ) : null}
+            <button
+              className={`${driverTripButtonClass} bg-red-500`}
+              disabled={isCancellingRide}
+              onClick={() => setShowCancelDialog(true)}
+              type="button"
+            >
+              {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {hasActiveTrip ? <div aria-hidden className="h-32 shrink-0 lg:hidden" /> : null}
 
       <RideCancelDialog<DriverCancelReasonCode>
         description="Choose a reason so the passenger knows why this ride was cancelled."

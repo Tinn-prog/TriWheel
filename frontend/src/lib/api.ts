@@ -141,6 +141,7 @@ export const apiRoutes = {
   rideReport: (rideId: number) => `${API_URL}/rides/${rideId}/report`,
   rideStatus: (rideId: number) => `${API_URL}/rides/${rideId}/status`,
   rideMessages: (rideId: number) => `${API_URL}/rides/${rideId}/messages`,
+  rideChats: `${API_URL}/ride-chats`,
   notifications: `${API_URL}/notifications`,
   notificationsUnreadCount: `${API_URL}/notifications/unread-count`,
   notificationMarkRead: (notificationId: number) =>

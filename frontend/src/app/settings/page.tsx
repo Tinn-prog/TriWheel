@@ -783,6 +783,15 @@ export default function SettingsPage() {
         title="Confirm password change"
         tone="danger"
       />
+
+      {usesAppShell ? (
+        <div className="lg:hidden">
+          <LogoutConfirmButton
+            className="mt-6 w-full rounded-2xl bg-slate-950 px-5 py-3.5 text-sm font-black text-white"
+            onConfirm={handleLogout}
+          />
+        </div>
+      ) : null}
     </section>
   );
 

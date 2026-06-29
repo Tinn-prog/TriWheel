@@ -2,6 +2,7 @@
 
 import { useStoredTriWheelSession } from "@/app/admin/AdminAccessGate";
 import { AppShell } from "@/components/AppShell";
+import { passengerNavItems } from "@/app/passenger/passengerNav";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { RideCancelDialog } from "@/components/RideCancelDialog";
@@ -203,19 +204,6 @@ function tripTrackingCopy(status: string, offerCount: number, isEmergency = fals
     title: statusLabel(status),
   };
 }
-
-const passengerNavItems = [
-  {
-    href: "/passenger#book-ride",
-    isDefaultSection: true,
-    label: "Book Ride",
-    shortLabel: "Book",
-  },
-  { href: "/passenger#active-ride", label: "Active Ride", shortLabel: "Active" },
-  { href: "/passenger/notifications", label: "Notifications", shortLabel: "Alerts" },
-  { href: "/passenger/history", label: "Ride History", shortLabel: "History" },
-  { href: "/settings", label: "Profile", shortLabel: "Profile" },
-];
 
 export function PassengerDashboard() {
   const router = useRouter();
@@ -1045,19 +1033,37 @@ export function PassengerDashboard() {
 
         <section className="mt-6 grid min-w-0 gap-6">
           <article
-            className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200"
+            className="relative overflow-hidden rounded-[1.75rem] bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:rounded-[2rem] sm:p-6"
             id="book-ride"
           >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-400 via-orange-500 to-amber-400"
+            />
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-sm font-bold uppercase tracking-[0.22em] text-orange-600">
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-orange-600 sm:text-sm">
                   Book now
                 </p>
-                <h2 className="mt-2 text-3xl font-black">Request a Ride</h2>
+                <h2 className="mt-1.5 text-2xl font-black sm:mt-2 sm:text-3xl">
+                  Request a Ride
+                </h2>
               </div>
-              <span className="w-fit rounded-full bg-orange-100 px-4 py-2 text-xs font-black text-orange-700">
+              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1.5 text-xs font-black text-orange-700 sm:px-4 sm:py-2">
+                <span className="size-2 rounded-full bg-orange-500" />
                 {hasActiveRide ? "Ride active" : "Ready"}
               </span>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-2 sm:mt-5">
+              {["Pickup", "Drop-off", "Confirm"].map((step, index) => (
+                <div
+                  className="rounded-2xl bg-slate-50 px-2 py-2 text-center text-[0.65rem] font-bold uppercase tracking-wide text-slate-500 sm:text-xs"
+                  key={step}
+                >
+                  <span className="text-orange-600">{index + 1}.</span> {step}
+                </div>
+              ))}
             </div>
 
             {hasActiveRide && (
@@ -1075,7 +1081,25 @@ export function PassengerDashboard() {
                 >
                   <div className="grid gap-3 rounded-3xl bg-slate-50 p-4">
                     <label className="grid gap-2 text-sm font-bold">
-                      Pickup location
+                      <span className="flex items-center gap-2">
+                        <span className="grid size-7 place-items-center rounded-xl bg-orange-100 text-orange-700">
+                          <svg
+                            className="size-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              d="M12 21s-6-4.35-6-10a6 6 0 1 1 12 0c0 5.65-6 10-6 10Z"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <circle cx="12" cy="11" r="2.5" />
+                          </svg>
+                        </span>
+                        Pickup location
+                      </span>
                       <input
                         className="rounded-2xl border border-slate-200 bg-white px-4 py-3 font-normal outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         name="pickup_address"
@@ -1115,7 +1139,24 @@ export function PassengerDashboard() {
                       )}
                     </label>
                     <label className="grid gap-2 text-sm font-bold">
-                      Drop-off location
+                      <span className="flex items-center gap-2">
+                        <span className="grid size-7 place-items-center rounded-xl bg-slate-200 text-slate-700">
+                          <svg
+                            className="size-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              d="m5 12 5 5L20 7"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </span>
+                        Drop-off location
+                      </span>
                       <input
                         className="rounded-2xl border border-slate-200 bg-white px-4 py-3 font-normal outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         name="dropoff_address"
@@ -1364,13 +1405,14 @@ export function PassengerDashboard() {
                         </div>
                       </div>
                       {activeRide.driver_name &&
-                      ["accepted", "ongoing"].includes(activeRide.status) &&
+                      ["accepted", "ongoing", "completed"].includes(activeRide.status) &&
                       user ? (
                         <div className="mt-4">
                           <RideContactPanel
                             contactName={activeRide.driver_name}
                             contactPhone={activeRide.driver_phone}
                             enabled
+                            messagesHref={`/passenger/messages?ride=${activeRide.id}`}
                             rideId={activeRide.id}
                             userId={user.id}
                             viewerRole="passenger"

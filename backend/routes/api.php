@@ -105,6 +105,7 @@ Route::patch('/passenger/ride-offers/{offer}/choose', [PassengerController::clas
 Route::get('/service-zones', [RideComplianceController::class, 'serviceZones']);
 Route::post('/rides/compliance-check', [RideComplianceController::class, 'check']);
 Route::get('/rides/{ride}/status', [RideController::class, 'status']);
+Route::get('/ride-chats', [RideMessageController::class, 'conversations']);
 Route::get('/rides/{ride}/messages', [RideMessageController::class, 'index']);
 Route::post('/rides/{ride}/messages', [RideMessageController::class, 'store']);
 Route::patch('/rides/{ride}/cancel', [RideController::class, 'cancel']);

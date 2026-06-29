@@ -7,12 +7,77 @@ use App\Models\Ride;
 use App\Models\RideMessage;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\RideChatService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class RideMessageController extends Controller
 {
-    public function index(Request $request, Ride $ride): JsonResponse
+    public function conversations(Request $request, RideChatService $chat): JsonResponse
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+        ]);
+
+        $user = User::query()->findOrFail($data['user_id']);
+
+        if (! in_array($user->role, ['passenger', 'driver'], true)) {
+            return response()->json([
+                'message' => 'Only passengers and drivers can access ride chats.',
+            ], 403);
+        }
+
+        $driverId = $user->role === 'driver'
+            ? Driver::query()->where('user_id', $user->id)->value('id')
+            : null;
+
+        $rides = Ride::query()
+            ->whereNotNull('accepted_at')
+            ->where('accepted_at', '>=', now()->subDays(7))
+            ->when($user->role === 'passenger', function ($query) use ($user) {
+                $query->where('passenger_id', $user->id);
+            })
+            ->when($user->role === 'driver' && $driverId, function ($query) use ($driverId) {
+                $query->where('driver_id', $driverId);
+            })
+            ->when($user->role === 'driver' && ! $driverId, function ($query) {
+                $query->whereRaw('1 = 0');
+            })
+            ->with([
+                'passenger:id,name',
+                'driver.user:id,name',
+                'messages' => function ($query) {
+                    $query->latest('id')->limit(1)->with('sender:id,name,role');
+                },
+            ])
+            ->orderByDesc('accepted_at')
+            ->limit(50)
+            ->get();
+
+        $conversations = $rides
+            ->map(function (Ride $ride) use ($user, $chat) {
+                $meta = $chat->chatMeta($ride, $user);
+                $lastMessage = $ride->messages->first();
+
+                return [
+                    'ride_id' => $ride->id,
+                    'ride_status' => $ride->status,
+                    'pickup_address' => $ride->pickup_address,
+                    'dropoff_address' => $ride->dropoff_address,
+                    'other_party_name' => $chat->otherPartyName($ride, $user),
+                    'other_party_role' => $chat->otherPartyRole($ride, $user),
+                    'chat' => $meta,
+                    'last_message' => $lastMessage ? $this->formatMessage($lastMessage) : null,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'conversations' => $conversations,
+        ]);
+    }
+
+    public function index(Request $request, Ride $ride, RideChatService $chat): JsonResponse
     {
         $data = $request->validate([
             'user_id' => ['required', 'integer', 'exists:users,id'],
@@ -21,7 +86,7 @@ class RideMessageController extends Controller
 
         $user = User::query()->findOrFail($data['user_id']);
 
-        if ($response = $this->ensureCanAccessRideChat($ride, $user)) {
+        if ($response = $this->ensureCanReadRideChat($ride, $user, $chat)) {
             return $response;
         }
 
@@ -41,11 +106,16 @@ class RideMessageController extends Controller
 
         return response()->json([
             'messages' => $messages,
+            'chat' => $chat->chatMeta($ride, $user),
         ]);
     }
 
-    public function store(Request $request, Ride $ride, NotificationService $notifications): JsonResponse
-    {
+    public function store(
+        Request $request,
+        Ride $ride,
+        NotificationService $notifications,
+        RideChatService $chat,
+    ): JsonResponse {
         $data = $request->validate([
             'user_id' => ['required', 'integer', 'exists:users,id'],
             'body' => ['required', 'string', 'max:1000'],
@@ -60,7 +130,13 @@ class RideMessageController extends Controller
             ], 422);
         }
 
-        if ($response = $this->ensureCanAccessRideChat($ride, $user)) {
+        if (! in_array($user->role, ['passenger', 'driver'], true)) {
+            return response()->json([
+                'message' => 'Only passengers and drivers can send ride chat messages.',
+            ], 403);
+        }
+
+        if ($response = $this->ensureCanSendRideChat($ride, $user, $chat)) {
             return $response;
         }
 
@@ -76,39 +152,48 @@ class RideMessageController extends Controller
         return response()->json([
             'message' => 'Message sent.',
             'chat_message' => $this->formatMessage($message),
+            'chat' => $chat->chatMeta($ride, $user),
         ], 201);
     }
 
-    private function ensureCanAccessRideChat(Ride $ride, User $user): ?JsonResponse
+    private function ensureCanReadRideChat(Ride $ride, User $user, RideChatService $chat): ?JsonResponse
     {
-        if (! $this->userParticipatesInRide($ride, $user)) {
+        if (! $chat->userParticipatesInRide($ride, $user)) {
             return response()->json([
                 'message' => 'You are not part of this ride.',
             ], 403);
         }
 
-        if (! in_array($ride->status, ['accepted', 'ongoing'], true)) {
+        if (! $ride->accepted_at) {
             return response()->json([
-                'message' => 'Chat is only available during an active trip.',
+                'message' => 'Chat opens once a driver accepts your ride.',
+            ], 422);
+        }
+
+        if (! $chat->canReadChat($ride, $user)) {
+            return response()->json([
+                'message' => 'This chat has ended. Ride chats stay open for 24 hours after a driver accepts.',
             ], 422);
         }
 
         return null;
     }
 
-    private function userParticipatesInRide(Ride $ride, User $user): bool
+    private function ensureCanSendRideChat(Ride $ride, User $user, RideChatService $chat): ?JsonResponse
     {
-        if ((int) $ride->passenger_id === (int) $user->id) {
-            return true;
+        if ($response = $this->ensureCanReadRideChat($ride, $user, $chat)) {
+            return $response;
         }
 
-        if ($user->role !== 'driver') {
-            return false;
+        if (! $chat->canSendChat($ride, $user)) {
+            return response()->json([
+                'message' => $ride->status === 'cancelled'
+                    ? 'This ride was cancelled. Chat is closed.'
+                    : 'You can no longer send messages in this chat.',
+            ], 422);
         }
 
-        $driver = Driver::query()->where('user_id', $user->id)->first();
-
-        return $driver && (int) $ride->driver_id === (int) $driver->id;
+        return null;
     }
 
     private function notifyRecipient(
@@ -132,7 +217,7 @@ class RideMessageController extends Controller
                 'ride.chat_message',
                 'New message from passenger',
                 "{$sender->name}: {$preview}",
-                '/driver',
+                '/driver/messages?ride='.$ride->id,
             );
 
             return;
@@ -149,7 +234,7 @@ class RideMessageController extends Controller
             'ride.chat_message',
             'New message from driver',
             "{$sender->name}: {$preview}",
-            '/passenger#active-ride',
+            '/passenger/messages?ride='.$ride->id,
         );
     }
 
