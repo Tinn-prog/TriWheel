@@ -109,4 +109,5 @@ Route::get('/ride-chats', [RideMessageController::class, 'conversations']);
 Route::get('/rides/{ride}/messages', [RideMessageController::class, 'index']);
 Route::post('/rides/{ride}/messages', [RideMessageController::class, 'store']);
 Route::patch('/rides/{ride}/cancel', [RideController::class, 'cancel']);
+Route::post('/rides/{ride}/cancel', [RideController::class, 'cancel']);
 Route::post('/rides/{ride}/report', [RideReportController::class, 'store']);

@@ -8,7 +8,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { RideCancelDialog } from "@/components/RideCancelDialog";
 import { RideReportDialog } from "@/components/RideReportDialog";
 import { TriWheelLoadingScreen } from "@/components/TriWheelLoadingScreen";
-import { apiFetch, apiRoutes } from "@/lib/api";
+import { apiFetch, apiRoutes, readApiErrorMessage } from "@/lib/api";
 import { logoutTriWheel } from "@/lib/logout";
 import { DriverRatingSummary, RideRatingForm } from "@/components/RideStarRating";
 import { RideContactPanel } from "@/components/RideContactPanel";
@@ -222,6 +222,7 @@ export function PassengerDashboard() {
   const [isSubmittingEmergency, setIsSubmittingEmergency] = useState(false);
   const [showEmergencyConfirm, setShowEmergencyConfirm] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelRideId, setCancelRideId] = useState<number | null>(null);
   const [cancelError, setCancelError] = useState("");
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [reportRideId, setReportRideId] = useState<number | null>(null);
@@ -613,11 +614,20 @@ export function PassengerDashboard() {
     }
   }
 
+  function openCancelDialog(rideId: number) {
+    setCancelRideId(rideId);
+    setCancelError("");
+    setShowCancelDialog(true);
+  }
+
   async function handleCancelRide(payload: {
     cancellation_reason_code: PassengerCancelReasonCode;
     cancellation_reason_detail?: string;
   }) {
-    if (!user || !overview?.active_ride) {
+    const rideId = cancelRideId ?? overview?.active_ride?.id;
+
+    if (!user || !rideId) {
+      setCancelError("No active ride found to cancel.");
       return;
     }
 
@@ -627,24 +637,28 @@ export function PassengerDashboard() {
     setIsCancellingRide(true);
 
     try {
-      const response = await apiFetch(apiRoutes.rideCancel(overview.active_ride.id), {
-        method: "PATCH",
+      const response = await apiFetch(apiRoutes.rideCancel(rideId), {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           user_id: user.id,
           cancellation_reason_code: payload.cancellation_reason_code,
-          cancellation_reason_detail: payload.cancellation_reason_detail,
+          cancellation_reason_detail: payload.cancellation_reason_detail ?? null,
         }),
       });
-      const data = (await response.json()) as { message?: string };
 
       if (!response.ok) {
-        throw new Error(data.message ?? "Unable to cancel ride.");
+        throw new Error(
+          await readApiErrorMessage(response, "Unable to cancel ride."),
+        );
       }
 
+      const data = (await response.json()) as { message?: string };
+
       setShowCancelDialog(false);
+      setCancelRideId(null);
       setNotice(data.message ?? "Ride cancelled successfully.");
       window.location.hash = "book-ride";
       await loadOverview(user.id);
@@ -1313,10 +1327,7 @@ export function PassengerDashboard() {
                         <button
                           className="min-h-11 rounded-2xl bg-red-500 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                           disabled={isCancellingRide}
-                          onClick={() => {
-                            setCancelError("");
-                            setShowCancelDialog(true);
-                          }}
+                          onClick={() => openCancelDialog(activeRide.id)}
                           type="button"
                         >
                           {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
@@ -1488,10 +1499,7 @@ export function PassengerDashboard() {
                           <button
                             className="min-h-11 w-full rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none sm:w-fit"
                             disabled={isCancellingRide}
-                            onClick={() => {
-                              setCancelError("");
-                              setShowCancelDialog(true);
-                            }}
+                            onClick={() => openCancelDialog(activeRide.id)}
                             type="button"
                           >
                             {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
@@ -1576,10 +1584,7 @@ export function PassengerDashboard() {
                           <button
                             className="min-h-11 w-full rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none sm:w-fit"
                             disabled={isCancellingRide}
-                            onClick={() => {
-                              setCancelError("");
-                              setShowCancelDialog(true);
-                            }}
+                            onClick={() => openCancelDialog(activeRide.id)}
                             type="button"
                           >
                             {isCancellingRide ? "Cancelling..." : "Cancel Emergency Ride"}
@@ -1665,15 +1670,12 @@ export function PassengerDashboard() {
         tone="danger"
       />
 
-      {canCancelActiveRide && activeRide ? (
+      {canCancelActiveRide && activeRide && !showCancelDialog ? (
         <div className="tw-passenger-cancel-bar fixed inset-x-0 z-[1050] border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.12)] backdrop-blur-md lg:hidden">
           <button
             className="mx-auto flex min-h-11 w-full max-w-3xl items-center justify-center rounded-2xl bg-red-500 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
             disabled={isCancellingRide}
-            onClick={() => {
-              setCancelError("");
-              setShowCancelDialog(true);
-            }}
+            onClick={() => openCancelDialog(activeRide.id)}
             type="button"
           >
             {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
@@ -1691,6 +1693,7 @@ export function PassengerDashboard() {
         isSubmitting={isCancellingRide}
         onClose={() => {
           setCancelError("");
+          setCancelRideId(null);
           setShowCancelDialog(false);
         }}
         onConfirm={(payload) => void handleCancelRide(payload)}

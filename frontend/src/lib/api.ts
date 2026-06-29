@@ -47,6 +47,32 @@ export function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   });
 }
 
+export async function readApiErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    const data = (await response.json()) as {
+      message?: string;
+      errors?: Record<string, string[]>;
+    };
+
+    if (data.message) {
+      return data.message;
+    }
+
+    const firstFieldError = Object.values(data.errors ?? {})[0]?.[0];
+
+    if (firstFieldError) {
+      return firstFieldError;
+    }
+  } catch {
+    // Response body was not JSON.
+  }
+
+  return fallback;
+}
+
 export function toApiUrl(
   path: string,
   params?: Record<string, string | boolean | undefined>,
