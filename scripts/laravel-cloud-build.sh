@@ -20,7 +20,7 @@ cp -Rf /tmp/monorepo/backend/. .
 
 composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
-php artisan config:cache
+# Do not cache config here — FRONTEND_URL is not available at build time on Cloud.
 php artisan route:cache
 
 rm -rf /tmp/monorepo
