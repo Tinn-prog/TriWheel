@@ -28,7 +28,14 @@ export async function checkRideCompliance(payload: {
     body: JSON.stringify(payload),
   });
 
-  const data = (await response.json()) as ComplianceResult & { message?: string };
+  const raw = await response.text();
+  let data: ComplianceResult & { message?: string };
+
+  try {
+    data = JSON.parse(raw) as ComplianceResult & { message?: string };
+  } catch {
+    throw new Error("Unable to check route compliance. Please try again.");
+  }
 
   if (!response.ok) {
     if (data.issues) {

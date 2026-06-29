@@ -1,8 +1,11 @@
 <?php
 
-use App\Support\RideTypes;
+namespace App\Services;
+
+use App\Models\Driver;
 use App\Models\PlatformSetting;
 use App\Models\Ride;
+use App\Support\RideTypes;
 
 class RoadRestrictionService
 {
