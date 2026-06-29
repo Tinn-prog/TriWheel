@@ -9,6 +9,8 @@ function resolveApiUrl() {
     return "/triwheel-api";
   }
 
+  // Production builds must set NEXT_PUBLIC_API_URL (see frontend/vercel.json).
+  console.error("NEXT_PUBLIC_API_URL is missing; API calls will fail in production.");
   return "http://localhost:8000/api";
 }
 

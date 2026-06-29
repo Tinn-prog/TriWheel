@@ -10,6 +10,7 @@ return [
     'allowed_methods' => ['*'],
     'allowed_origins' => $frontendOrigins,
     'allowed_origins_patterns' => [
+        '#^https://[a-z0-9-]+(\\.[a-z0-9-]+)*\\.vercel\\.app$#i',
         '#^https://[a-z0-9-]+\.ngrok-free\.app$#i',
         '#^https://[a-z0-9-]+\.ngrok-free\.dev$#i',
         '#^https://[a-z0-9-]+\.ngrok\.io$#i',
