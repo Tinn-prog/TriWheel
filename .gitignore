@@ -16,6 +16,10 @@
 # Laravel storage (uploaded files)
 backend/storage/app/public/*
 !backend/storage/app/public/.gitignore
+backend/database/database.sqlite
+
+# Root composer.lock is a Laravel Cloud monorepo marker (copy of backend/composer.lock).
+# Re-copy from backend/ after composer update in backend/.
 
 # IDE & OS
 .DS_Store
