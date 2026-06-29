@@ -1274,20 +1274,18 @@ export function PassengerDashboard() {
                     selectedDropoff={dropoffPoint}
                     selectedPickup={pickupPoint}
                   />
+                </div>
+              </div>
 
-                  <div className="rounded-3xl border border-red-100 bg-red-50/40 p-4">
-                    <button
-                      className="w-full rounded-2xl border border-red-200 bg-white px-6 py-4 font-black text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-red-100 disabled:bg-red-50/60 disabled:text-red-300"
-                      disabled={!canRequestEmergency}
-                      onClick={() => void openEmergencyConfirm()}
-                      type="button"
-                    >
-                      {isSubmittingEmergency ? "Dispatching..." : "Emergency Ride"}
-                    </button>
-                    <p className="mt-3 text-xs font-semibold leading-5 text-red-800/80">
-                      Emergency dispatch ignores your selected ride type and assigns
-                      the nearest online tricycle or e-tricycle driver who is not on
-                      another trip.
+              <div className="rounded-3xl border border-red-100 bg-gradient-to-br from-red-50/80 to-white p-4 sm:p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-red-600">
+                      Emergency dispatch
+                    </p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-red-900/80">
+                      Assigns the nearest online tricycle or e-tricycle driver who is
+                      not on another trip. Ignores your selected ride type.
                     </p>
                     {!hasEmergencyPickup ? (
                       <p className="mt-2 text-xs font-semibold text-red-700">
@@ -1295,6 +1293,14 @@ export function PassengerDashboard() {
                       </p>
                     ) : null}
                   </div>
+                  <button
+                    className="min-h-11 w-full shrink-0 rounded-2xl border border-red-200 bg-white px-6 py-3 text-sm font-black text-red-600 transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-red-100 disabled:bg-red-50/60 disabled:text-red-300 sm:w-auto sm:min-w-[12rem]"
+                    disabled={!canRequestEmergency}
+                    onClick={() => void openEmergencyConfirm()}
+                    type="button"
+                  >
+                    {isSubmittingEmergency ? "Dispatching..." : "Emergency Ride"}
+                  </button>
                 </div>
               </div>
             </form>
@@ -1325,12 +1331,16 @@ export function PassengerDashboard() {
                       </div>
                       {canPassengerCancelRide(activeRide.status) ? (
                         <button
-                          className="min-h-11 rounded-2xl bg-red-500 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                          className="hidden min-h-11 rounded-2xl bg-red-500 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none lg:inline-flex lg:items-center"
                           disabled={isCancellingRide}
                           onClick={() => openCancelDialog(activeRide.id)}
                           type="button"
                         >
-                          {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
+                          {isCancellingRide
+                            ? "Cancelling..."
+                            : activeRide.is_emergency
+                              ? "Cancel Emergency Ride"
+                              : "Cancel Ride"}
                         </button>
                       ) : null}
                     </div>
@@ -1483,27 +1493,14 @@ export function PassengerDashboard() {
                             Your previous driver cancelled ({activeRide.cancellation_reason}). We are finding another driver for you.
                           </div>
                         ) : null}
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-600">
-                              Choose your match
-                            </p>
-                            <h3 className="mt-1 text-xl font-black">
-                              Driver Offers
-                            </h3>
-                            <p className="text-sm text-slate-500">
-                              Compare available drivers before confirming your
-                              trip.
-                            </p>
-                          </div>
-                          <button
-                            className="min-h-11 w-full rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none sm:w-fit"
-                            disabled={isCancellingRide}
-                            onClick={() => openCancelDialog(activeRide.id)}
-                            type="button"
-                          >
-                            {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
-                          </button>
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-600">
+                            Choose your match
+                          </p>
+                          <h3 className="mt-1 text-xl font-black">Driver Offers</h3>
+                          <p className="text-sm text-slate-500">
+                            Compare available drivers before confirming your trip.
+                          </p>
                         </div>
 
                         <div className="mt-4 grid gap-3">
@@ -1578,20 +1575,6 @@ export function PassengerDashboard() {
                         </div>
                       </div>
                     )}
-                    {activeRide.is_emergency &&
-                      ["accepted", "requested"].includes(activeRide.status) && (
-                        <div className="m-5 mt-0 flex justify-end">
-                          <button
-                            className="min-h-11 w-full rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none sm:w-fit"
-                            disabled={isCancellingRide}
-                            onClick={() => openCancelDialog(activeRide.id)}
-                            type="button"
-                          >
-                            {isCancellingRide ? "Cancelling..." : "Cancel Emergency Ride"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
                   </article>
                 );
               })()}
@@ -1678,7 +1661,11 @@ export function PassengerDashboard() {
             onClick={() => openCancelDialog(activeRide.id)}
             type="button"
           >
-            {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
+            {isCancellingRide
+              ? "Cancelling..."
+              : activeRide.is_emergency
+                ? "Cancel Emergency Ride"
+                : "Cancel Ride"}
           </button>
         </div>
       ) : null}

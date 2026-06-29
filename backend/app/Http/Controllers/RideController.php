@@ -12,6 +12,7 @@ use App\Services\FareService;
 use App\Services\NotificationService;
 use App\Services\RoadRestrictionService;
 use App\Services\RideMatchingService;
+use App\Support\RideCancellationReasons;
 use App\Support\RideTypes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
