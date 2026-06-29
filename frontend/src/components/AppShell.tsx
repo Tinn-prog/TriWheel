@@ -330,7 +330,7 @@ export function AppShell({
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col lg:ml-72">
-        <div className="flex-1 px-4 pb-28 pt-16 sm:px-6 sm:pb-24 lg:px-6 lg:pb-8 lg:pt-6">
+        <div className="flex-1 px-4 pb-[calc(6.25rem+env(safe-area-inset-bottom))] pt-16 sm:px-6 sm:pb-24 lg:px-6 lg:pb-8 lg:pt-6">
           {children}
         </div>
       </div>

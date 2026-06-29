@@ -944,9 +944,6 @@ export function PassengerDashboard() {
     !pendingRatingRide.passenger_rated &&
     !dismissedRatingRideIds.includes(pendingRatingRide.id);
   const hasActiveRide = Boolean(activeRide);
-  const canCancelActiveRide = activeRide
-    ? canPassengerCancelRide(activeRide.status)
-    : false;
   const canRequestRide = !hasActiveRide && !isSubmittingRide && !isSubmittingEmergency;
   const hasEmergencyPickup =
     Boolean(pickupPoint) || pickupAddress.trim().length >= 3;
@@ -1317,7 +1314,7 @@ export function PassengerDashboard() {
 
                 return (
                   <article
-                    className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200"
+                    className="mb-4 rounded-[2rem] bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:mb-0 sm:p-6"
                     id="active-ride"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1331,7 +1328,7 @@ export function PassengerDashboard() {
                       </div>
                       {canPassengerCancelRide(activeRide.status) ? (
                         <button
-                          className="hidden min-h-11 rounded-2xl bg-red-500 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none lg:inline-flex lg:items-center"
+                          className="inline-flex min-h-10 shrink-0 items-center rounded-2xl bg-red-500 px-3 py-2 text-xs font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none sm:min-h-11 sm:px-4 sm:py-2.5 sm:text-sm"
                           disabled={isCancellingRide}
                           onClick={() => openCancelDialog(activeRide.id)}
                           type="button"
@@ -1339,8 +1336,8 @@ export function PassengerDashboard() {
                           {isCancellingRide
                             ? "Cancelling..."
                             : activeRide.is_emergency
-                              ? "Cancel Emergency Ride"
-                              : "Cancel Ride"}
+                              ? "Cancel emergency"
+                              : "Cancel ride"}
                         </button>
                       ) : null}
                     </div>
@@ -1652,25 +1649,6 @@ export function PassengerDashboard() {
         title="Request emergency ride?"
         tone="danger"
       />
-
-      {canCancelActiveRide && activeRide && !showCancelDialog ? (
-        <div className="tw-passenger-cancel-bar fixed inset-x-0 z-[1050] border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.12)] backdrop-blur-md lg:hidden">
-          <button
-            className="mx-auto flex min-h-11 w-full max-w-3xl items-center justify-center rounded-2xl bg-red-500 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-            disabled={isCancellingRide}
-            onClick={() => openCancelDialog(activeRide.id)}
-            type="button"
-          >
-            {isCancellingRide
-              ? "Cancelling..."
-              : activeRide.is_emergency
-                ? "Cancel Emergency Ride"
-                : "Cancel Ride"}
-          </button>
-        </div>
-      ) : null}
-
-      {canCancelActiveRide ? <div aria-hidden className="h-24 shrink-0 lg:hidden" /> : null}
 
       <RideCancelDialog<PassengerCancelReasonCode>
         description="Choose a reason so nearby drivers know why this ride was cancelled."

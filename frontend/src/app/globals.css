@@ -153,7 +153,7 @@ select {
   }
 
   .tw-mobile-nav-link {
-    @apply flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-2 text-center text-[0.58rem] font-semibold leading-tight text-slate-500 transition active:bg-orange-50 active:text-orange-700 sm:text-[0.65rem];
+    @apply flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 text-center text-[0.56rem] font-semibold leading-tight text-slate-500 transition active:bg-orange-50 active:text-orange-700 sm:min-h-14 sm:py-2 sm:text-[0.65rem];
   }
 
   .tw-mobile-nav-link span:last-child {
@@ -165,11 +165,7 @@ select {
   }
 
   .tw-driver-trip-bar {
-    bottom: calc(4.75rem + env(safe-area-inset-bottom));
-  }
-
-  .tw-passenger-cancel-bar {
-    bottom: calc(4.75rem + env(safe-area-inset-bottom));
+    bottom: calc(5.25rem + env(safe-area-inset-bottom));
   }
 
   .tw-section-title {
