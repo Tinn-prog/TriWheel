@@ -1,12 +1,13 @@
 "use client";
 
 import type { CancelReasonCode } from "@/lib/rideCancellation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function RideCancelDialog<TCode extends CancelReasonCode>({
   confirmLabel = "Cancel Ride",
   description,
   detailPlaceholder = "Tell them why you are cancelling...",
+  error,
   isOpen,
   isSubmitting,
   onClose,
@@ -17,6 +18,7 @@ export function RideCancelDialog<TCode extends CancelReasonCode>({
   confirmLabel?: string;
   description: string;
   detailPlaceholder?: string;
+  error?: string;
   isOpen: boolean;
   isSubmitting: boolean;
   onClose: () => void;
@@ -29,6 +31,13 @@ export function RideCancelDialog<TCode extends CancelReasonCode>({
 }) {
   const [reasonCode, setReasonCode] = useState<TCode>(reasons[0].code);
   const [reasonDetail, setReasonDetail] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) {
+      setReasonCode(reasons[0].code);
+      setReasonDetail("");
+    }
+  }, [isOpen, reasons]);
 
   if (!isOpen) {
     return null;
@@ -52,14 +61,14 @@ export function RideCancelDialog<TCode extends CancelReasonCode>({
   const canConfirm = !needsDetail || reasonDetail.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-[1200] overflow-y-auto bg-slate-950/70 p-4">
-      <div className="flex min-h-full items-center justify-center">
+    <div className="fixed inset-0 z-[1200] overflow-y-auto bg-slate-950/70 p-0 sm:p-4">
+      <div className="flex min-h-full items-end justify-center sm:items-center">
         <div
           aria-modal="true"
-          className="flex max-h-[min(90dvh,calc(100dvh-2rem))] w-full max-w-lg flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl ring-1 ring-slate-200"
+          className="flex max-h-[min(92dvh,calc(100dvh-1rem))] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-white shadow-2xl ring-1 ring-slate-200 sm:max-h-[min(90dvh,calc(100dvh-2rem))] sm:rounded-[2rem]"
           role="dialog"
         >
-          <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-red-600">
               Cancel Ride
             </p>
@@ -69,7 +78,7 @@ export function RideCancelDialog<TCode extends CancelReasonCode>({
             <div className="mt-5 grid gap-2">
               {reasons.map((reason) => (
                 <label
-                  className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition ${
+                  className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition ${
                     reasonCode === reason.code
                       ? "border-orange-300 bg-orange-50"
                       : "border-slate-200 bg-white"
@@ -78,7 +87,7 @@ export function RideCancelDialog<TCode extends CancelReasonCode>({
                 >
                   <input
                     checked={reasonCode === reason.code}
-                    className="size-4 accent-orange-500"
+                    className="size-4 shrink-0 accent-orange-500"
                     disabled={isSubmitting}
                     name="cancel-reason"
                     onChange={() => setReasonCode(reason.code)}
@@ -99,11 +108,20 @@ export function RideCancelDialog<TCode extends CancelReasonCode>({
                 value={reasonDetail}
               />
             ) : null}
+
+            {error ? (
+              <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                {error}
+              </p>
+            ) : null}
           </div>
 
-          <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4">
+          <div
+            className="flex shrink-0 flex-col gap-2 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:gap-3 sm:px-6"
+            style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+          >
             <button
-              className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700"
+              className="min-h-11 rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700"
               disabled={isSubmitting}
               onClick={handleClose}
               type="button"
@@ -111,7 +129,7 @@ export function RideCancelDialog<TCode extends CancelReasonCode>({
               Keep Ride
             </button>
             <button
-              className="rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="min-h-11 rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
               disabled={isSubmitting || !canConfirm}
               onClick={handleConfirm}
               type="button"

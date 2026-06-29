@@ -8,7 +8,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { RideCancelDialog } from "@/components/RideCancelDialog";
 import { RideReportDialog } from "@/components/RideReportDialog";
 import { TriWheelLoadingScreen } from "@/components/TriWheelLoadingScreen";
-import { apiRoutes } from "@/lib/api";
+import { apiFetch, apiRoutes } from "@/lib/api";
 import { logoutTriWheel } from "@/lib/logout";
 import { DriverRatingSummary, RideRatingForm } from "@/components/RideStarRating";
 import { RideContactPanel } from "@/components/RideContactPanel";
@@ -205,6 +205,10 @@ function tripTrackingCopy(status: string, offerCount: number, isEmergency = fals
   };
 }
 
+function canPassengerCancelRide(status: string) {
+  return status === "requested" || status === "accepted";
+}
+
 export function PassengerDashboard() {
   const router = useRouter();
   const { isChecking, user } = useStoredTriWheelSession() as {
@@ -218,6 +222,7 @@ export function PassengerDashboard() {
   const [isSubmittingEmergency, setIsSubmittingEmergency] = useState(false);
   const [showEmergencyConfirm, setShowEmergencyConfirm] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelError, setCancelError] = useState("");
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [reportRideId, setReportRideId] = useState<number | null>(null);
   const [isCancellingRide, setIsCancellingRide] = useState(false);
@@ -618,10 +623,11 @@ export function PassengerDashboard() {
 
     setError("");
     setNotice("");
+    setCancelError("");
     setIsCancellingRide(true);
 
     try {
-      const response = await fetch(apiRoutes.rideCancel(overview.active_ride.id), {
+      const response = await apiFetch(apiRoutes.rideCancel(overview.active_ride.id), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -640,13 +646,15 @@ export function PassengerDashboard() {
 
       setShowCancelDialog(false);
       setNotice(data.message ?? "Ride cancelled successfully.");
+      window.location.hash = "book-ride";
       await loadOverview(user.id);
     } catch (caughtError) {
-      setError(
+      const message =
         caughtError instanceof Error
           ? caughtError.message
-          : "Unable to cancel ride.",
-      );
+          : "Unable to cancel ride.";
+      setCancelError(message);
+      setError(message);
     } finally {
       setIsCancellingRide(false);
     }
@@ -922,6 +930,9 @@ export function PassengerDashboard() {
     !pendingRatingRide.passenger_rated &&
     !dismissedRatingRideIds.includes(pendingRatingRide.id);
   const hasActiveRide = Boolean(activeRide);
+  const canCancelActiveRide = activeRide
+    ? canPassengerCancelRide(activeRide.status)
+    : false;
   const canRequestRide = !hasActiveRide && !isSubmittingRide && !isSubmittingEmergency;
   const hasEmergencyPickup =
     Boolean(pickupPoint) || pickupAddress.trim().length >= 3;
@@ -1289,12 +1300,27 @@ export function PassengerDashboard() {
                     className="rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200"
                     id="active-ride"
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-2xl font-black">Active Ride</h2>
-                      {activeRide.is_emergency ? (
-                        <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-red-700">
-                          Emergency
-                        </span>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-2xl font-black">Active Ride</h2>
+                        {activeRide.is_emergency ? (
+                          <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-red-700">
+                            Emergency
+                          </span>
+                        ) : null}
+                      </div>
+                      {canPassengerCancelRide(activeRide.status) ? (
+                        <button
+                          className="min-h-11 rounded-2xl bg-red-500 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                          disabled={isCancellingRide}
+                          onClick={() => {
+                            setCancelError("");
+                            setShowCancelDialog(true);
+                          }}
+                          type="button"
+                        >
+                          {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
+                        </button>
                       ) : null}
                     </div>
                     <div className="mt-6 overflow-hidden rounded-3xl bg-slate-950 text-white shadow-2xl shadow-slate-200">
@@ -1460,9 +1486,12 @@ export function PassengerDashboard() {
                             </p>
                           </div>
                           <button
-                            className="w-fit rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                            className="min-h-11 w-full rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none sm:w-fit"
                             disabled={isCancellingRide}
-                            onClick={() => setShowCancelDialog(true)}
+                            onClick={() => {
+                              setCancelError("");
+                              setShowCancelDialog(true);
+                            }}
                             type="button"
                           >
                             {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
@@ -1545,9 +1574,12 @@ export function PassengerDashboard() {
                       ["accepted", "requested"].includes(activeRide.status) && (
                         <div className="m-5 mt-0 flex justify-end">
                           <button
-                            className="rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                            className="min-h-11 w-full rounded-2xl bg-red-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none sm:w-fit"
                             disabled={isCancellingRide}
-                            onClick={() => setShowCancelDialog(true)}
+                            onClick={() => {
+                              setCancelError("");
+                              setShowCancelDialog(true);
+                            }}
                             type="button"
                           >
                             {isCancellingRide ? "Cancelling..." : "Cancel Emergency Ride"}
@@ -1633,12 +1665,34 @@ export function PassengerDashboard() {
         tone="danger"
       />
 
+      {canCancelActiveRide && activeRide ? (
+        <div className="tw-passenger-cancel-bar fixed inset-x-0 z-[1050] border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_30px_rgba(15,23,42,0.12)] backdrop-blur-md lg:hidden">
+          <button
+            className="mx-auto flex min-h-11 w-full max-w-3xl items-center justify-center rounded-2xl bg-red-500 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            disabled={isCancellingRide}
+            onClick={() => {
+              setCancelError("");
+              setShowCancelDialog(true);
+            }}
+            type="button"
+          >
+            {isCancellingRide ? "Cancelling..." : "Cancel Ride"}
+          </button>
+        </div>
+      ) : null}
+
+      {canCancelActiveRide ? <div aria-hidden className="h-24 shrink-0 lg:hidden" /> : null}
+
       <RideCancelDialog<PassengerCancelReasonCode>
         description="Choose a reason so nearby drivers know why this ride was cancelled."
         detailPlaceholder="Tell the driver why you are cancelling..."
+        error={cancelError}
         isOpen={showCancelDialog}
         isSubmitting={isCancellingRide}
-        onClose={() => setShowCancelDialog(false)}
+        onClose={() => {
+          setCancelError("");
+          setShowCancelDialog(false);
+        }}
         onConfirm={(payload) => void handleCancelRide(payload)}
         reasons={passengerCancelReasons}
         title="Why are you cancelling?"

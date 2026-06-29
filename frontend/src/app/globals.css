@@ -168,6 +168,10 @@ select {
     bottom: calc(4.75rem + env(safe-area-inset-bottom));
   }
 
+  .tw-passenger-cancel-bar {
+    bottom: calc(4.75rem + env(safe-area-inset-bottom));
+  }
+
   .tw-section-title {
     @apply text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl;
   }

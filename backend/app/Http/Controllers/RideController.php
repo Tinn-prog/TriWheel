@@ -294,12 +294,11 @@ class RideController extends Controller
             ], 403);
         }
 
-        $canCancel = $ride->status === 'requested'
-            || ($ride->status === 'accepted' && $ride->is_emergency);
+        $canCancel = in_array($ride->status, ['requested', 'accepted'], true);
 
         if (! $canCancel) {
             return response()->json([
-                'message' => 'Only requested rides can be cancelled by the passenger.',
+                'message' => 'This ride can no longer be cancelled.',
             ], 422);
         }
 
