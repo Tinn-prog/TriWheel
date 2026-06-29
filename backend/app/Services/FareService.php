@@ -1,5 +1,8 @@
 <?php
 
+namespace App\Services;
+
+use App\Models\PlatformSetting;
 use App\Support\RideTypes;
 
 class FareService
