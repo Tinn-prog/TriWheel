@@ -659,7 +659,7 @@ class AuthController extends Controller
 
     private function frontendUrl(string $path): string
     {
-        $configured = trim(explode(',', (string) env('FRONTEND_URL', 'http://localhost:3000'))[0]);
+        $configured = trim(explode(',', (string) config('app.frontend_url', 'http://localhost:3000'))[0]);
 
         return rtrim($configured, '/').'/'.ltrim($path, '/');
     }

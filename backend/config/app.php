@@ -56,6 +56,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL (Next.js / Vercel)
+    |--------------------------------------------------------------------------
+    |
+    | Used for email action links and CORS. Must be set in config (not env())
+    | when config:cache runs in production.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

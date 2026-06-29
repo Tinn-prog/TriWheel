@@ -63,7 +63,7 @@ class EmailNotificationService
             return $path;
         }
 
-        $base = rtrim((string) env('FRONTEND_URL', 'http://localhost:3000'), '/');
+        $base = rtrim((string) config('app.frontend_url', 'http://localhost:3000'), '/');
 
         return $base.'/'.ltrim($path, '/');
     }
