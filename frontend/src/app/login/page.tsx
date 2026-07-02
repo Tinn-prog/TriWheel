@@ -1,3 +1,4 @@
+import { TriWheelLogo } from "@/components/TriWheelLogo";
 import Image from "next/image";
 import Link from "next/link";
 import { LoginForm } from "./LoginForm";
@@ -60,11 +61,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <Image
         alt=""
         aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 h-auto w-[min(82vw,820px)] -translate-x-1/2 -translate-y-1/2 opacity-10 blur-[1px] drop-shadow-[0_35px_90px_rgba(0,0,0,0.65)]"
-        height={576}
+        className="pointer-events-none absolute left-1/2 top-1/2 size-[min(82vw,820px)] -translate-x-1/2 -translate-y-1/2 opacity-10 blur-[1px] drop-shadow-[0_35px_90px_rgba(0,0,0,0.65)] object-contain"
+        height={820}
         priority
         src="/triwheel-brand-logo-v2.png"
-        width={1024}
+        width={820}
       />
       <div className="absolute inset-0 bg-[linear-gradient(135deg,_rgba(255,255,255,0.06),_rgba(255,255,255,0)_40%,_rgba(0,0,0,0.55))]" />
 
@@ -80,19 +81,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <div className="flex flex-1 items-center justify-center">
         <div className="grid w-full overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-black/40 ring-1 ring-white/10 lg:grid-cols-[0.9fr_1.1fr]">
           <section className="bg-gradient-to-br from-orange-700 via-orange-800 to-orange-950 p-5 text-white sm:p-12">
-            <Link className="inline-flex items-center gap-3" href="/">
-              <span className="relative h-12 w-24 overflow-hidden rounded-2xl bg-black shadow-lg shadow-orange-700/20">
-                <Image
-                  alt="TriWheel logo"
-                  className="object-contain p-1"
-                  fill
-                  priority
-                  sizes="96px"
-                  src="/triwheel-brand-logo-v2.png"
-                />
-              </span>
-              <span className="text-2xl font-black">TriWheel</span>
-            </Link>
+            <TriWheelLogo href="/" size="lg" wordmarkClassName="text-white" />
 
             <div className="mt-8 sm:mt-12">
               <p className="text-sm font-bold uppercase tracking-[0.3em] text-orange-200/90">

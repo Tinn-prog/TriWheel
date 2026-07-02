@@ -2,7 +2,7 @@
 
 import { apiFetch, apiRoutes } from "@/lib/api";
 import { PasswordRequirements } from "@/components/PasswordRequirements";
-import Image from "next/image";
+import { TriWheelLogo } from "@/components/TriWheelLogo";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
@@ -161,18 +161,7 @@ export default function ResetPasswordPage() {
         <div className="flex flex-1 items-center justify-center">
           <div className="w-full overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-black/40 ring-1 ring-white/10">
             <section className="bg-gradient-to-br from-orange-700 via-orange-800 to-orange-950 p-6 text-white sm:p-8">
-              <div className="inline-flex items-center gap-3">
-                <span className="relative h-10 w-20 overflow-hidden rounded-xl bg-black">
-                  <Image
-                    alt="TriWheel logo"
-                    className="object-contain p-1"
-                    fill
-                    sizes="80px"
-                    src="/triwheel-brand-logo-v2.png"
-                  />
-                </span>
-                <span className="text-xl font-black">TriWheel</span>
-              </div>
+              <TriWheelLogo size="md" wordmarkClassName="text-white" />
               <h1 className="mt-6 text-3xl font-black">Choose a new password</h1>
               <p className="mt-3 text-orange-100/90">
                 Enter and confirm your new password to finish resetting your account.

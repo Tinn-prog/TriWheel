@@ -1,3 +1,4 @@
+import { TriWheelLogo } from "@/components/TriWheelLogo";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -65,21 +66,7 @@ export default function Home() {
     <main className="min-h-screen overflow-x-hidden bg-[#f9fafb] text-[#1a1d23]">
       <nav className="sticky top-0 z-20 border-b border-black/5 bg-white/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
-          <Link className="flex items-center gap-3" href="/">
-            <span className="relative h-10 w-20 shrink-0 overflow-hidden rounded-2xl bg-black shadow-lg shadow-orange-500/20 sm:h-12 sm:w-24">
-              <Image
-                alt="TriWheel logo"
-                className="object-contain p-1"
-                fill
-                priority
-                sizes="96px"
-                src="/triwheel-brand-logo-v2.png"
-              />
-            </span>
-            <span className="text-lg font-black tracking-tight sm:text-xl">
-              TriWheel
-            </span>
-          </Link>
+          <TriWheelLogo href="/" size="lg" wordmarkClassName="text-lg sm:text-xl" />
 
           <div className="hidden items-center gap-8 text-sm font-semibold text-slate-600 md:flex">
             <a className="hover:text-orange-600" href="#features">
@@ -135,7 +122,7 @@ export default function Home() {
 
           <div className="rounded-[2rem] border border-white bg-white/80 p-3 shadow-2xl shadow-slate-200">
             <div className="overflow-hidden rounded-[1.65rem] bg-slate-950 p-5 text-white">
-              <div className="relative aspect-[16/9] overflow-hidden rounded-[1.25rem] bg-black">
+              <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-[1.25rem] bg-black">
                 <Image
                   alt="TriWheel tricycle logo"
                   className="object-contain p-4"
@@ -273,18 +260,7 @@ export default function Home() {
       <footer className="bg-slate-950 py-14 text-white" id="about">
         <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 sm:px-6 md:grid-cols-[1.3fr_0.7fr_0.7fr]">
           <div>
-            <div className="flex items-center gap-3">
-              <span className="relative h-12 w-24 overflow-hidden rounded-2xl bg-black">
-                <Image
-                  alt="TriWheel logo"
-                  className="object-contain p-1"
-                  fill
-                  sizes="96px"
-                  src="/triwheel-brand-logo-v2.png"
-                />
-              </span>
-              <span className="text-2xl font-black">TriWheel</span>
-            </div>
+            <TriWheelLogo size="lg" />
             <p className="mt-5 max-w-xl text-base leading-7 text-slate-400">
               Your reliable ride-hailing partner for local tricycle, pedicab,
               and e-tricycle trips.

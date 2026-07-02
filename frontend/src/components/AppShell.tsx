@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { TriWheelLogo } from "@/components/TriWheelLogo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
@@ -185,29 +185,11 @@ function NavIcon({
 
 function BrandLink({ compact = false }: { compact?: boolean }) {
   return (
-    <Link className="inline-flex min-w-0 items-center gap-2.5" href="/">
-      <span
-        className={`relative shrink-0 overflow-hidden rounded-xl bg-black shadow-sm ${
-          compact ? "h-8 w-14" : "h-10 w-[4.5rem]"
-        }`}
-      >
-        <Image
-          alt=""
-          aria-hidden="true"
-          className="object-contain p-0.5"
-          fill
-          sizes={compact ? "56px" : "72px"}
-          src="/triwheel-brand-logo-v2.png"
-        />
-      </span>
-      <span
-        className={`truncate font-bold text-slate-900 ${
-          compact ? "text-lg" : "text-2xl"
-        }`}
-      >
-        TriWheel
-      </span>
-    </Link>
+    <TriWheelLogo
+      href="/"
+      size={compact ? "sm" : "md"}
+      wordmarkClassName="font-bold text-slate-900"
+    />
   );
 }
 

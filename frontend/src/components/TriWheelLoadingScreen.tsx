@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { TriWheelLogoMark } from "@/components/TriWheelLogo";
 
 type TriWheelLoadingScreenProps = {
   compact?: boolean;
@@ -26,22 +26,14 @@ export function TriWheelLoadingScreen({
             : "relative w-full max-w-lg rounded-[2rem] border border-white/20 bg-white/15 p-8 text-center shadow-2xl shadow-black/30 backdrop-blur-xl"
         }
       >
-        <div
+        <TriWheelLogoMark
           className={
             compact
-              ? "relative mx-auto aspect-[3/2] w-44 overflow-hidden rounded-[1.5rem] bg-black shadow-2xl shadow-orange-900/20"
-              : "relative mx-auto aspect-[3/2] w-72 max-w-full overflow-hidden rounded-[1.75rem] bg-black shadow-2xl shadow-orange-950/30"
+              ? "mx-auto shadow-2xl shadow-orange-900/20"
+              : "mx-auto shadow-2xl shadow-orange-950/30"
           }
-        >
-          <Image
-            alt="TriWheel logo"
-            className="object-contain p-2"
-            fill
-            priority={!compact}
-            sizes={compact ? "176px" : "288px"}
-            src="/triwheel-brand-logo-v2.png"
-          />
-        </div>
+          size={compact ? "2xl" : "3xl"}
+        />
 
         <div className="mt-8 flex justify-center gap-2">
           {[0, 1, 2].map((item) => (
