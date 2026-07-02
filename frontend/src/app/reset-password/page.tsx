@@ -2,6 +2,7 @@
 
 import { apiFetch, apiRoutes } from "@/lib/api";
 import { PasswordRequirements } from "@/components/PasswordRequirements";
+import { ShadowedStreetBackground } from "@/components/ShadowedStreetBackground";
 import { TriWheelLogo } from "@/components/TriWheelLogo";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -146,9 +147,10 @@ function ResetPasswordForm() {
 export default function ResetPasswordPage() {
   return (
     <main
-      className="relative min-h-screen overflow-x-hidden px-4 py-6 text-white sm:px-6 sm:py-10"
-      style={{ background: "var(--auth-bg)" }}
+      className="relative min-h-screen overflow-x-hidden bg-[var(--auth-bg)] px-4 py-6 text-white sm:px-6 sm:py-10"
     >
+      <ShadowedStreetBackground />
+
       <div className="relative z-10 mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-3xl flex-col sm:min-h-[calc(100vh-5rem)]">
         <Link
           className="mb-4 inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-white/90 transition hover:text-white"

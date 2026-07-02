@@ -6,8 +6,8 @@ import {
   TermsAndConditionsModal,
 } from "@/components/TermsAndConditions";
 import { PasswordRequirements } from "@/components/PasswordRequirements";
+import { ShadowedStreetBackground } from "@/components/ShadowedStreetBackground";
 import { TriWheelLogo } from "@/components/TriWheelLogo";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
@@ -87,19 +87,9 @@ export default function DriverRegisterPage() {
 
   return (
     <main
-      className="relative min-h-screen overflow-x-hidden px-4 py-6 text-white sm:px-6 sm:py-10"
-      style={{ background: "var(--auth-bg)" }}
+      className="relative min-h-screen overflow-x-hidden bg-[var(--auth-bg)] px-4 py-6 text-white sm:px-6 sm:py-10"
     >
-      <Image
-        alt=""
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 size-[min(82vw,820px)] -translate-x-1/2 -translate-y-1/2 opacity-10 blur-[1px] drop-shadow-[0_35px_90px_rgba(0,0,0,0.65)] object-contain"
-        height={820}
-        priority
-        src="/triwheel-brand-logo-v2.png"
-        width={820}
-      />
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,_rgba(255,255,255,0.06),_rgba(255,255,255,0)_40%,_rgba(0,0,0,0.55))]" />
+      <ShadowedStreetBackground priority />
 
       <div className="relative z-10 mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl flex-col sm:min-h-[calc(100vh-5rem)]">
         <Link

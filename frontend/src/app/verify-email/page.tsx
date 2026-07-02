@@ -1,7 +1,7 @@
 "use client";
 
 import { apiFetch, apiRoutes } from "@/lib/api";
-import Image from "next/image";
+import { ShadowedStreetBackground } from "@/components/ShadowedStreetBackground";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
@@ -180,19 +180,9 @@ function VerifyEmailForm() {
 export default function VerifyEmailPage() {
   return (
     <main
-      className="relative min-h-screen overflow-x-hidden px-4 py-6 text-white sm:px-6 sm:py-10"
-      style={{ background: "var(--auth-bg)" }}
+      className="relative min-h-screen overflow-x-hidden bg-[var(--auth-bg)] px-4 py-6 text-white sm:px-6 sm:py-10"
     >
-      <Image
-        alt=""
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 size-[min(82vw,820px)] -translate-x-1/2 -translate-y-1/2 opacity-10 blur-[1px] object-contain"
-        height={820}
-        priority
-        src="/triwheel-brand-logo-v2.png"
-        width={820}
-      />
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,_rgba(255,255,255,0.06),_rgba(255,255,255,0)_40%,_rgba(0,0,0,0.55))]" />
+      <ShadowedStreetBackground />
 
       <div className="relative z-10 mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-xl items-center justify-center">
         <div className="w-full overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-black/40 ring-1 ring-white/10">

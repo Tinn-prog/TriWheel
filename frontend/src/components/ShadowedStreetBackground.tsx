@@ -1,22 +1,15 @@
-import Image from "next/image";
-
 type ShadowedStreetBackgroundProps = {
   priority?: boolean;
 };
 
 export function ShadowedStreetBackground({
-  priority = false,
+  priority: _priority = false,
 }: ShadowedStreetBackgroundProps) {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0 bg-[#6b1d1d]" />
-      <Image
-        alt=""
-        className="object-cover object-center brightness-[0.72] contrast-110 saturate-[0.45]"
-        fill
-        priority={priority}
-        sizes="100vw"
-        src="/triwheel-street-bg.png"
+      <div
+        className="absolute inset-0 bg-[#6b1d1d] bg-cover bg-center brightness-[0.72] contrast-110 saturate-[0.45]"
+        style={{ backgroundImage: "url(/triwheel-street-bg.png)" }}
       />
       <div className="absolute inset-0 bg-red-800/75 mix-blend-multiply" />
       <div className="absolute inset-0 bg-red-950/40" />

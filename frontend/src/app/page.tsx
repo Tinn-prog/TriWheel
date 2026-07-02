@@ -1,3 +1,4 @@
+import { ShadowedStreetBackground } from "@/components/ShadowedStreetBackground";
 import { TriWheelLogo } from "@/components/TriWheelLogo";
 import Image from "next/image";
 import Link from "next/link";
@@ -89,30 +90,30 @@ export default function Home() {
         </div>
       </nav>
 
-      <section className="relative overflow-hidden">
-        <div className="absolute left-1/2 top-12 -z-0 size-[520px] -translate-x-1/2 rounded-full bg-orange-200/40 blur-3xl" />
-        <div className="relative mx-auto grid w-full max-w-7xl items-center gap-8 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:py-24">
+      <section className="relative overflow-hidden bg-[var(--auth-bg)] text-white">
+        <ShadowedStreetBackground priority />
+        <div className="relative z-10 mx-auto grid w-full max-w-7xl items-center gap-8 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:py-24">
           <div>
-            <p className="mb-5 inline-flex rounded-full bg-orange-100 px-4 py-2 text-sm font-bold text-orange-700">
+            <p className="mb-5 inline-flex rounded-full bg-white/15 px-4 py-2 text-sm font-bold text-orange-100 ring-1 ring-white/20 backdrop-blur-sm">
               Your local ride-hailing partner
             </p>
             <h1 className="max-w-3xl text-4xl font-black leading-tight tracking-tight sm:text-6xl lg:text-7xl">
-              Your Ride, <span className="text-orange-500">Your Way</span>
+              Your Ride, <span className="text-orange-300">Your Way</span>
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 sm:mt-6 sm:text-lg sm:leading-8">
+            <p className="mt-4 max-w-2xl text-base leading-7 text-orange-50/90 sm:mt-6 sm:text-lg sm:leading-8">
               Affordable, reliable, and convenient tricycle, pedicab, and
               e-tricycle rides at your fingertips.
             </p>
 
             <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row">
               <Link
-                className="rounded-2xl bg-orange-500 px-7 py-4 text-center font-bold text-white shadow-xl shadow-orange-500/25 transition hover:bg-orange-600"
+                className="rounded-2xl bg-orange-500 px-7 py-4 text-center font-bold text-white shadow-xl shadow-black/30 transition hover:bg-orange-600"
                 href="/signup"
               >
                 Sign Up Free
               </Link>
               <a
-                className="rounded-2xl border border-slate-200 bg-white px-7 py-4 text-center font-bold text-slate-900 shadow-sm transition hover:border-orange-300 hover:text-orange-600"
+                className="rounded-2xl border border-white/25 bg-white/10 px-7 py-4 text-center font-bold text-white shadow-sm backdrop-blur-sm transition hover:border-orange-200 hover:bg-white/15"
                 href="#how-it-works"
               >
                 How It Works

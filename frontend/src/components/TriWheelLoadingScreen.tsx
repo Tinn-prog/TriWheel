@@ -1,3 +1,4 @@
+import { ShadowedStreetBackground } from "@/components/ShadowedStreetBackground";
 import { TriWheelLogoMark } from "@/components/TriWheelLogo";
 
 type TriWheelLoadingScreenProps = {
@@ -16,14 +17,15 @@ export function TriWheelLoadingScreen({
       className={
         compact
           ? "grid min-h-80 place-items-center rounded-3xl bg-gradient-to-br from-orange-50 via-white to-slate-50 p-6"
-          : "grid min-h-screen place-items-center overflow-hidden bg-[radial-gradient(circle_at_top_left,_#ffedd5_0%,_#fb923c_34%,_#7c2d12_68%,_#1c0f08_100%)] px-6 py-10 text-white"
+          : "relative grid min-h-screen place-items-center overflow-hidden bg-[var(--auth-bg)] px-6 py-10 text-white"
       }
     >
+      {!compact ? <ShadowedStreetBackground priority /> : null}
       <section
         className={
           compact
             ? "w-full max-w-sm rounded-[2rem] bg-white p-6 text-center shadow-xl shadow-orange-100 ring-1 ring-orange-100"
-            : "relative w-full max-w-lg rounded-[2rem] border border-white/20 bg-white/15 p-8 text-center shadow-2xl shadow-black/30 backdrop-blur-xl"
+            : "relative z-10 w-full max-w-lg rounded-[2rem] border border-white/20 bg-white/15 p-8 text-center shadow-2xl shadow-black/30 backdrop-blur-xl"
         }
       >
         <TriWheelLogoMark
