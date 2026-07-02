@@ -10,13 +10,7 @@
   --accent: #ea580c;
   --accent-hover: #c2410c;
   --accent-soft: #fff7ed;
-  --auth-bg: radial-gradient(
-    circle at top left,
-    #9a3412 0%,
-    #7c2d12 32%,
-    #431407 68%,
-    #0a0503 100%
-  );
+  --auth-bg: #4a1212;
   --radius: 1rem;
 }
 
