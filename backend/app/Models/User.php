@@ -96,4 +96,19 @@ class User extends Authenticatable
     {
         return $this->hasMany(Ride::class, 'passenger_id');
     }
+
+    protected static function booted(): void
+    {
+        static::saving(function (User $user): void {
+            if ($user->role === 'admin') {
+                if (blank($user->admin_role)) {
+                    $user->admin_role = 'operator';
+                }
+
+                return;
+            }
+
+            $user->admin_role = null;
+        });
+    }
 }

@@ -85,8 +85,9 @@ export default function SuperAdminOverviewPage() {
           Platform Governance
         </h1>
         <p className="mt-4 max-w-2xl text-sm leading-7 text-red-100/90 sm:text-base">
-          Welcome back, {user?.name ?? "Super Admin"}. This console is separate
-          from day-to-day operations and is reserved for platform owners.
+          Welcome back, {user?.name ?? "Super Admin"}. Super admins use a
+          separate account from admin operators and have full access to
+          operations, settings, user management, and platform fixes.
         </p>
       </header>
 

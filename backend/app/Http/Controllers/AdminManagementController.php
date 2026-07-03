@@ -374,6 +374,27 @@ class AdminManagementController extends Controller
             $data['admin_role'] = null;
         }
 
+        if (($data['role'] ?? $user->role) === 'admin' && blank($data['admin_role'] ?? $user->admin_role)) {
+            $data['admin_role'] = 'operator';
+        }
+
+        if (
+            $user->admin_role === 'super_admin'
+            && ($data['admin_role'] ?? $user->admin_role) !== 'super_admin'
+        ) {
+            $remainingSuperAdmins = User::query()
+                ->where('role', 'admin')
+                ->where('admin_role', 'super_admin')
+                ->where('id', '!=', $user->id)
+                ->count();
+
+            if ($remainingSuperAdmins < 1) {
+                return response()->json([
+                    'message' => 'At least one super admin account must remain active.',
+                ], 422);
+            }
+        }
+
         $user->update($data);
 
         $this->audit->log($admin, 'user.updated', 'user', $user->id, $data);
@@ -388,14 +409,8 @@ class AdminManagementController extends Controller
     {
         $admin = $this->requireAdmin($request);
 
-        if (
-            $admin->admin_role !== 'super_admin'
-            && ! PlatformSetting::accessPolicy()['operators_can_suspend_users']
-        ) {
-            throw new HttpResponseException(response()->json([
-                'message' => 'You do not have permission to suspend users.',
-            ], 403));
-        }
+        $this->assertAdminCanManageUser($admin, $user);
+        $this->assertOperatorPolicy($admin, 'operators_can_suspend_users');
 
         if ($user->id === $admin->id) {
             return response()->json([
@@ -665,14 +680,7 @@ class AdminManagementController extends Controller
     {
         $admin = $this->requireAdmin($request);
 
-        if (
-            $admin->admin_role !== 'super_admin'
-            && ! PlatformSetting::accessPolicy()['operators_can_manage_reports']
-        ) {
-            throw new HttpResponseException(response()->json([
-                'message' => 'You do not have permission to manage ride reports.',
-            ], 403));
-        }
+        $this->assertOperatorPolicy($admin, 'operators_can_manage_reports');
 
         $data = $request->validate([
             'status' => ['required', Rule::in(['pending', 'reviewed', 'dismissed'])],

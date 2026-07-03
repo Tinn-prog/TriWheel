@@ -11,12 +11,18 @@ export const operatorNavItems = [
 ] as const;
 
 export const superAdminNavItems = [
-  { href: "/superadmin", label: "Overview" },
-  { href: "/superadmin/users", label: "Users" },
-  { href: "/superadmin/settings", label: "Settings" },
+  { href: "/superadmin", label: "Governance" },
+  { href: "/admin", label: "Operations Overview" },
+  { href: "/admin/emergency", label: "Emergency" },
+  { href: "/admin/map", label: "Live Map" },
+  { href: "/admin/drivers", label: "Drivers" },
+  { href: "/admin/passengers", label: "Passengers" },
+  { href: "/admin/rides", label: "Rides" },
+  { href: "/admin/reports", label: "Reports" },
+  { href: "/superadmin/users", label: "User Accounts" },
+  { href: "/superadmin/settings", label: "Platform Settings" },
   { href: "/superadmin/audit", label: "Audit Log" },
-  { href: "/superadmin/analytics", label: "Analytics" },
-  { href: "/admin", label: "Operations Console" },
+  { href: "/superadmin/analytics", label: "Analytics & Exports" },
 ] as const;
 
 export const superAdminOnlyAdminPaths = [

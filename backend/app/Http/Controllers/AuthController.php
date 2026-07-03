@@ -750,14 +750,18 @@ class AuthController extends Controller
 
             if ($credentials['portal'] === 'superadmin' && ! $isSuperAdmin) {
                 throw ValidationException::withMessages([
-                    'email' => ['This account does not have super admin access. Use the admin operator login instead.'],
+                    'email' => ['This account is an admin operator account. Use the Admin Operator login instead.'],
                 ]);
             }
 
             if ($credentials['portal'] === 'admin' && $isSuperAdmin) {
                 throw ValidationException::withMessages([
-                    'email' => ['Super admin accounts must use the Super Admin login.'],
+                    'email' => ['This account is a super admin account. Use the Super Admin login instead.'],
                 ]);
+            }
+
+            if ($credentials['portal'] === 'admin' && $user->role === 'admin' && blank($user->admin_role)) {
+                $user->forceFill(['admin_role' => 'operator'])->save();
             }
         }
 

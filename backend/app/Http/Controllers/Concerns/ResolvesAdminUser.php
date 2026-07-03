@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\User;
+use App\Models\PlatformSetting;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -43,13 +44,49 @@ trait ResolvesAdminUser
     {
         $admin = $this->requireAdmin($request);
 
-        if ($admin->admin_role !== 'super_admin') {
+        if (! $this->isSuperAdminUser($admin)) {
             throw new HttpResponseException(response()->json([
                 'message' => 'Super admin access is required for this action.',
             ], 403));
         }
 
         return $admin;
+    }
+
+    protected function isSuperAdminUser(User $user): bool
+    {
+        return $user->role === 'admin' && $user->admin_role === 'super_admin';
+    }
+
+    protected function isOperatorUser(User $user): bool
+    {
+        return $user->role === 'admin' && $user->admin_role !== 'super_admin';
+    }
+
+    protected function assertAdminCanManageUser(User $admin, User $target): void
+    {
+        if ($this->isSuperAdminUser($admin)) {
+            return;
+        }
+
+        if ($target->role === 'admin') {
+            throw new HttpResponseException(response()->json([
+                'message' => 'Admin operator accounts cannot manage other admin accounts.',
+            ], 403));
+        }
+    }
+
+    protected function assertOperatorPolicy(User $admin, string $policyKey): void
+    {
+        if ($this->isSuperAdminUser($admin)) {
+            return;
+        }
+
+        if (! (PlatformSetting::accessPolicy()[$policyKey] ?? false)) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'You do not have permission to perform this action.',
+            ], 403));
+        }
     }
 
     protected function resolveAdminFromToken(Request $request): ?User

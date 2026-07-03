@@ -38,6 +38,10 @@ export function isSuperAdmin(): boolean {
   return getAdminRole() === "super_admin";
 }
 
+export function isOperator(): boolean {
+  return getAdminRole() === "operator";
+}
+
 function getAuthHeaders(): HeadersInit {
   const headers: Record<string, string> = {
     Accept: "application/json",

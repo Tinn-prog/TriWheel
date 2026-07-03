@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { adminGet, adminPatch, apiRoutes, isSuperAdmin } from "@/lib/adminApi";
+import { formatAdminRoleLabel } from "@/lib/adminRoles";
 import { useCallback, useEffect, useState } from "react";
 import { AdminFilterBar, AdminFilterField, adminInputClass } from "../AdminFilters";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
@@ -129,7 +130,10 @@ export function AdminUsersPage() {
 
   return (
     <SuperAdminPageGuard>
-    <AdminModuleShell description="Review, edit, and suspend platform accounts." title="User Management">
+    <AdminModuleShell
+      description="Super admins manage separate admin operator accounts. Operators cannot manage other admin accounts."
+      title="User Accounts"
+    >
       {error ? <div className="mt-6 rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</div> : null}
       {notice ? <div className="mt-6 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">{notice}</div> : null}
 
@@ -167,7 +171,14 @@ export function AdminUsersPage() {
                     <div className="font-black">{user.name}</div>
                     <div className="text-slate-500">{user.email}</div>
                   </td>
-                  <td className="px-5 py-4 capitalize">{user.role} {user.admin_role ? `(${user.admin_role})` : ""}</td>
+                  <td className="px-5 py-4 capitalize">
+                    {user.role}
+                    {user.role === "admin" ? (
+                      <span className="mt-1 block text-xs font-bold normal-case text-slate-500">
+                        {formatAdminRoleLabel(user.admin_role)}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="px-5 py-4">
                     <span className={`rounded-full px-3 py-1 text-xs font-black ${user.is_verified ? statusClass("verified") : statusClass("unverified")}`}>
                       {user.is_verified ? "yes" : "no"}
@@ -224,8 +235,8 @@ export function AdminUsersPage() {
               </select>
               {editForm.role === "admin" ? (
                 <select className={adminInputClass()} onChange={(event) => setEditForm((current) => ({ ...current, admin_role: event.target.value }))} value={editForm.admin_role}>
-                  <option value="operator">Operator</option>
-                  <option value="super_admin">Super Admin</option>
+                  <option value="operator">Admin Operator (day-to-day operations)</option>
+                  <option value="super_admin">Super Admin (full platform control)</option>
                 </select>
               ) : null}
             </div>

@@ -149,8 +149,8 @@ export function AdminDashboard() {
               TriWheel Operations
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-orange-50 sm:mt-3 sm:text-base">
-              Monitor users, drivers, rides, verification requests, and core
-              platform activity.
+              Monitor drivers, passengers, rides, and daily operations. Admin
+              operator accounts use a separate login from super admin accounts.
             </p>
             <Link
               className="mt-4 inline-flex min-h-9 w-fit items-center justify-center rounded-lg bg-white px-4 py-2 text-xs font-black text-orange-700 sm:text-sm"

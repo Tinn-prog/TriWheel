@@ -15,14 +15,6 @@ function isNavActive(pathname: string, href: string, homeHref: string) {
     return pathname === homeHref;
   }
 
-  if (href === "/superadmin") {
-    return pathname === "/superadmin";
-  }
-
-  if (href === "/admin") {
-    return pathname === "/admin";
-  }
-
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

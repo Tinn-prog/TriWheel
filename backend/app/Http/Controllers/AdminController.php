@@ -272,14 +272,7 @@ class AdminController extends Controller
     {
         $admin = $this->requireAdmin($request);
 
-        if (
-            $admin->admin_role !== 'super_admin'
-            && ! PlatformSetting::accessPolicy()['operators_can_approve_drivers']
-        ) {
-            throw new HttpResponseException(response()->json([
-                'message' => 'You do not have permission to approve or reject drivers.',
-            ], 403));
-        }
+        $this->assertOperatorPolicy($admin, 'operators_can_approve_drivers');
 
         $data = $request->validate([
             'approval_status' => ['required', Rule::in(['approved', 'rejected'])],

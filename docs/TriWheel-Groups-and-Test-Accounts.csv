@@ -1,0 +1,20 @@
+TriWheel — Deployment Groups & Test Accounts,,,,,
+,,,,,
+GROUP DEPLOYMENTS,,,TEST ACCOUNTS (per group / shared demo),,
+Group #,System Link,,Role,Username,Password
+1,,,Super Admin,admin@triwheel.test,password123
+2,,,Admin (Operator),operator@triwheel.test,password123
+3,,,Driver,driver@triwheel.test,password123
+4,,,Passenger (User),passenger@triwheel.test,password123
+5,,,Passenger 2,passenger2@triwheel.test,password123
+6,,,Unverified User,unverified@triwheel.test,password123
+7,,,,,
+8,,,,,
+9,,,,,
+10,,,,,
+,,,,,
+Notes,,,,,
+"System Link = live URL for that group's deployed app (e.g. Vercel frontend).",,,,,
+"Use the same test accounts on every group's instance after seeding the database.",,,,,
+"Super Admin = full platform access. Admin (Operator) = limited admin panel.",,,,,
+"Passenger = end user booking rides. Driver = accepts rides & updates location.",,,,,

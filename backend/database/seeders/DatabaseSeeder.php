@@ -23,13 +23,27 @@ class DatabaseSeeder extends Seeder
         User::updateOrCreate([
             'email' => 'admin@triwheel.test',
         ], [
-            'name' => 'TriWheel Admin',
+            'name' => 'TriWheel Super Admin',
             'first_name' => 'TriWheel',
             'middle_name' => null,
-            'last_name' => 'Admin',
+            'last_name' => 'Super Admin',
             'contact_number' => '09170000001',
             'role' => 'admin',
             'admin_role' => 'super_admin',
+            'is_verified' => true,
+            'password' => $password,
+        ]);
+
+        User::updateOrCreate([
+            'email' => 'operator@triwheel.test',
+        ], [
+            'name' => 'TriWheel Admin Operator',
+            'first_name' => 'TriWheel',
+            'middle_name' => null,
+            'last_name' => 'Operator',
+            'contact_number' => '09170000004',
+            'role' => 'admin',
+            'admin_role' => 'operator',
             'is_verified' => true,
             'password' => $password,
         ]);
