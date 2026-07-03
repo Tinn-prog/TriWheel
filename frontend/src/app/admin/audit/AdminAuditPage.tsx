@@ -1,9 +1,9 @@
 ﻿"use client";
 
-import { adminGet, apiRoutes } from "@/lib/adminApi";
+import { adminDownload, adminGet, apiRoutes } from "@/lib/adminApi";
 import { formatAuditAction, formatAuditDetailLines } from "@/lib/formatAuditDetails";
 import { useCallback, useEffect, useState } from "react";
-import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
+import { AdminExportButton, AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell } from "../AdminModuleShell";
 
 type AuditLog = {
@@ -38,6 +38,8 @@ const auditActions = [
   "settings.road_restrictions_updated",
   "settings.system_config_updated",
   "settings.access_policy_updated",
+  "admin.operator_created",
+  "users.imported",
 ] as const;
 
 const targetTypes = ["user", "driver", "ride", "ride_report", "platform_setting"] as const;
@@ -45,6 +47,7 @@ const targetTypes = ["user", "driver", "ride", "ride_report", "platform_setting"
 export default function AdminAuditPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [targetTypeFilter, setTargetTypeFilter] = useState("");
@@ -77,6 +80,34 @@ export default function AdminAuditPage() {
       title="Audit Log"
     >
       {error ? <div className="mt-6 rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</div> : null}
+      {notice ? <div className="mt-6 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">{notice}</div> : null}
+
+      <section className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-slate-600">
+          Export respects the filters below.
+        </p>
+        <AdminExportButton
+          filename="audit-logs.csv"
+          label="Export Audit Log"
+          onExport={async () => {
+            setError("");
+            setNotice("");
+
+            try {
+              await adminDownload(apiRoutes.adminExportAuditLogs, "audit-logs.csv", {
+                search: debouncedSearch || undefined,
+                action: actionFilter || undefined,
+                target_type: targetTypeFilter || undefined,
+              });
+              setNotice("Audit log exported.");
+            } catch (caughtError) {
+              setError(
+                caughtError instanceof Error ? caughtError.message : "Unable to export audit log.",
+              );
+            }
+          }}
+        />
+      </section>
 
       <AdminFilterBar>
         <AdminFilterField label="Search">

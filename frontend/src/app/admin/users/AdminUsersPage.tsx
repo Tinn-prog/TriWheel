@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { adminGet, adminPatch, apiRoutes, isSuperAdmin } from "@/lib/adminApi";
+import { adminGet, adminPatch, adminPost, apiRoutes, isSuperAdmin } from "@/lib/adminApi";
 import { formatAdminRoleLabel } from "@/lib/adminRoles";
 import { useCallback, useEffect, useState } from "react";
 import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
@@ -27,6 +27,7 @@ export function AdminUsersPage() {
   const [notice, setNotice] = useState("");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [editTarget, setEditTarget] = useState<AdminUser | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [suspendTarget, setSuspendTarget] = useState<AdminUser | null>(null);
   const [busyUserId, setBusyUserId] = useState<number | null>(null);
   const [roleFilter, setRoleFilter] = useState("");
@@ -41,6 +42,12 @@ export function AdminUsersPage() {
     role: "passenger",
     admin_role: "",
     is_verified: false,
+  });
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    email: "",
+    contact_number: "",
+    password: "",
   });
 
   const loadUsers = useCallback(async () => {
@@ -75,6 +82,37 @@ export function AdminUsersPage() {
       admin_role: user.admin_role ?? "",
       is_verified: user.is_verified,
     });
+  }
+
+  async function createOperator() {
+    setBusyUserId(-1);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await adminPost(apiRoutes.adminUsers, createForm);
+      const data = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(data.message ?? "Unable to create operator account.");
+      }
+
+      setNotice(data.message ?? "Admin operator account created.");
+      setCreateOpen(false);
+      setCreateForm({
+        name: "",
+        email: "",
+        contact_number: "",
+        password: "",
+      });
+      await loadUsers();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : "Unable to create operator account.",
+      );
+    } finally {
+      setBusyUserId(null);
+    }
   }
 
   async function saveUser() {
@@ -141,6 +179,18 @@ export function AdminUsersPage() {
     >
       {error ? <div className="mt-6 rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</div> : null}
       {notice ? <div className="mt-6 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">{notice}</div> : null}
+
+      {isSuperAdmin() ? (
+        <div className="mt-6 flex justify-end">
+          <button
+            className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white"
+            onClick={() => setCreateOpen(true)}
+            type="button"
+          >
+            Create Operator Account
+          </button>
+        </div>
+      ) : null}
 
       <AdminFilterBar>
         <AdminFilterField label="Role">
@@ -241,6 +291,59 @@ export function AdminUsersPage() {
           </table>
         </div>
       </section>
+
+      {createOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-lg rounded-[2rem] bg-white p-6">
+            <h2 className="text-2xl font-black">Create Operator Account</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Super admins can create admin operator accounts for day-to-day operations.
+            </p>
+            <div className="mt-4 grid gap-3">
+              <input
+                className={adminInputClass()}
+                onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="Full name"
+                value={createForm.name}
+              />
+              <input
+                className={adminInputClass()}
+                onChange={(event) => setCreateForm((current) => ({ ...current, email: event.target.value }))}
+                placeholder="Email"
+                type="email"
+                value={createForm.email}
+              />
+              <input
+                className={adminInputClass()}
+                onChange={(event) => setCreateForm((current) => ({ ...current, contact_number: event.target.value }))}
+                placeholder="Contact number (optional)"
+                value={createForm.contact_number}
+              />
+              <input
+                className={adminInputClass()}
+                minLength={6}
+                onChange={(event) => setCreateForm((current) => ({ ...current, password: event.target.value }))}
+                placeholder="Password (min 6 characters)"
+                type="password"
+                value={createForm.password}
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button className="rounded-2xl border px-4 py-2 font-black" onClick={() => setCreateOpen(false)} type="button">
+                Cancel
+              </button>
+              <button
+                className="rounded-2xl bg-orange-500 px-4 py-2 font-black text-white disabled:bg-slate-300"
+                disabled={busyUserId === -1}
+                onClick={() => void createOperator()}
+                type="button"
+              >
+                {busyUserId === -1 ? "Creating..." : "Create Operator"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {editTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">

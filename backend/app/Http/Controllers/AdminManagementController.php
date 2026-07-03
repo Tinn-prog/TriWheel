@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -337,45 +338,195 @@ class AdminManagementController extends Controller
     {
         $this->requireSuperAdmin($request);
 
-        $data = $request->validate([
-            'search' => ['sometimes', 'string', 'max:100'],
-            'action' => ['sometimes', 'string', 'max:80'],
-            'target_type' => ['sometimes', 'string', 'max:40'],
-        ]);
-
-        $logs = AdminAuditLog::query()
-            ->with('admin:id,name,email,admin_role')
-            ->when(filled($data['action'] ?? null), fn ($query) => $query->where('action', $data['action']))
-            ->when(filled($data['target_type'] ?? null), fn ($query) => $query->where('target_type', $data['target_type']))
-            ->when(filled($data['search'] ?? null), function ($query) use ($data): void {
-                $term = '%'.$data['search'].'%';
-
-                $query->where(function ($inner) use ($term, $data): void {
-                    $inner->where('action', 'like', $term)
-                        ->orWhere('target_type', 'like', $term)
-                        ->orWhere('target_id', 'like', trim($term, '%'))
-                        ->orWhereHas('admin', function ($adminQuery) use ($term): void {
-                            $adminQuery->where('name', 'like', $term)
-                                ->orWhere('email', 'like', $term);
-                        });
-                });
-            })
-            ->latest()
+        $logs = $this->filteredAuditLogsQuery($request)
             ->limit(200)
             ->get()
-            ->map(fn (AdminAuditLog $log): array => [
-                'id' => $log->id,
-                'admin_name' => $log->admin?->name,
-                'admin_email' => $log->admin?->email,
-                'admin_role' => $log->admin?->admin_role,
-                'action' => $log->action,
-                'target_type' => $log->target_type,
-                'target_id' => $log->target_id,
-                'details' => $log->details ? json_decode($log->details, true) : null,
-                'created_at' => $log->created_at,
-            ]);
+            ->map(fn (AdminAuditLog $log): array => $this->formatAuditLog($log));
 
         return response()->json(['logs' => $logs]);
+    }
+
+    public function exportAuditLogs(Request $request): StreamedResponse
+    {
+        $this->requireSuperAdmin($request);
+
+        $logs = $this->filteredAuditLogsQuery($request)
+            ->limit(5000)
+            ->get();
+
+        return $this->streamCsv('audit-logs.csv', [
+            'ID', 'When', 'Admin', 'Admin Email', 'Admin Role', 'Action', 'Target Type', 'Target ID', 'Details',
+        ], $logs->map(function (AdminAuditLog $log): array {
+            $details = $log->details ? json_decode($log->details, true) : null;
+
+            return [
+                $log->id,
+                $log->created_at?->toDateTimeString() ?? '',
+                $log->admin?->name ?? '',
+                $log->admin?->email ?? '',
+                $log->admin?->admin_role ?? '',
+                $log->action,
+                $log->target_type,
+                $log->target_id,
+                $details ? json_encode($details) : '',
+            ];
+        }));
+    }
+
+    public function storeAdminUser(Request $request): JsonResponse
+    {
+        $admin = $this->requireSuperAdmin($request);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:6', 'max:255'],
+            'contact_number' => ['nullable', 'string', 'max:30'],
+        ]);
+
+        $nameParts = preg_split('/\s+/', trim($data['name']), 2) ?: [];
+
+        $user = User::create([
+            'name' => $data['name'],
+            'first_name' => $nameParts[0] ?? $data['name'],
+            'last_name' => $nameParts[1] ?? '',
+            'email' => $data['email'],
+            'contact_number' => $data['contact_number'] ?? null,
+            'password' => $data['password'],
+            'role' => 'admin',
+            'admin_role' => 'operator',
+            'is_verified' => true,
+        ]);
+
+        $user->forceFill(['email_verified_at' => now()])->save();
+
+        $this->audit->log($admin, 'admin.operator_created', 'user', $user->id, [
+            'email' => $user->email,
+            'name' => $user->name,
+        ]);
+
+        return response()->json([
+            'message' => 'Admin operator account created successfully.',
+            'user' => $this->formatAdminUser($user->refresh()),
+        ], 201);
+    }
+
+    public function importUsers(Request $request): JsonResponse
+    {
+        $admin = $this->requireSuperAdmin($request);
+
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+        ]);
+
+        $handle = fopen($request->file('file')->getRealPath(), 'r');
+
+        if ($handle === false) {
+            return response()->json([
+                'message' => 'Unable to read the uploaded CSV file.',
+            ], 422);
+        }
+
+        $headerRow = fgetcsv($handle) ?: [];
+        $headers = collect($headerRow)
+            ->map(fn ($value) => Str::of((string) $value)->trim()->lower()->toString())
+            ->all();
+
+        $columnIndex = fn (string $name): ?int => ($index = array_search($name, $headers, true)) === false ? null : $index;
+
+        $nameIndex = $columnIndex('name');
+        $emailIndex = $columnIndex('email');
+        $roleIndex = $columnIndex('role');
+        $adminRoleIndex = $columnIndex('admin role');
+        $contactIndex = $columnIndex('contact');
+        $passwordIndex = $columnIndex('password');
+
+        if ($nameIndex === null || $emailIndex === null || $roleIndex === null) {
+            fclose($handle);
+
+            return response()->json([
+                'message' => 'CSV must include Name, Email, and Role columns.',
+            ], 422);
+        }
+
+        $created = 0;
+        $skipped = 0;
+        $errors = [];
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $email = trim((string) ($row[$emailIndex] ?? ''));
+
+            if ($email === '') {
+                continue;
+            }
+
+            if (User::query()->where('email', $email)->exists()) {
+                $skipped++;
+                continue;
+            }
+
+            $role = Str::of((string) ($row[$roleIndex] ?? ''))->trim()->lower()->toString();
+
+            if (! in_array($role, ['passenger', 'admin'], true)) {
+                $errors[] = "Skipped {$email}: role must be passenger or admin.";
+                $skipped++;
+                continue;
+            }
+
+            $password = trim((string) ($row[$passwordIndex] ?? ''));
+
+            if ($password === '') {
+                $errors[] = "Skipped {$email}: password is required for new accounts.";
+                $skipped++;
+                continue;
+            }
+
+            if (strlen($password) < 6) {
+                $errors[] = "Skipped {$email}: password must be at least 6 characters.";
+                $skipped++;
+                continue;
+            }
+
+            $name = trim((string) ($row[$nameIndex] ?? ''));
+            $nameParts = preg_split('/\s+/', $name, 2) ?: [];
+            $adminRole = Str::of((string) ($row[$adminRoleIndex] ?? 'operator'))->trim()->lower()->replace(' ', '_')->toString();
+
+            if ($role === 'admin' && $adminRole !== 'operator') {
+                $errors[] = "Skipped {$email}: only admin operator accounts can be imported.";
+                $skipped++;
+                continue;
+            }
+
+            $user = User::create([
+                'name' => $name !== '' ? $name : $email,
+                'first_name' => $nameParts[0] ?? ($name !== '' ? $name : $email),
+                'last_name' => $nameParts[1] ?? '',
+                'email' => $email,
+                'contact_number' => trim((string) ($row[$contactIndex] ?? '')) ?: null,
+                'password' => $password,
+                'role' => $role,
+                'admin_role' => $role === 'admin' ? 'operator' : null,
+                'is_verified' => true,
+            ]);
+
+            $user->forceFill(['email_verified_at' => now()])->save();
+
+            $created++;
+        }
+
+        fclose($handle);
+
+        $this->audit->log($admin, 'users.imported', 'platform_setting', 0, [
+            'created' => $created,
+            'skipped' => $skipped,
+        ]);
+
+        return response()->json([
+            'message' => "Import finished. {$created} created, {$skipped} skipped.",
+            'created' => $created,
+            'skipped' => $skipped,
+            'errors' => array_slice($errors, 0, 20),
+        ]);
     }
 
     public function updateUser(Request $request, User $user): JsonResponse
@@ -584,6 +735,52 @@ class AdminManagementController extends Controller
         }, $filename, [
             'Content-Type' => 'text/csv',
         ]);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<AdminAuditLog>
+     */
+    private function filteredAuditLogsQuery(Request $request)
+    {
+        $data = $request->validate([
+            'search' => ['sometimes', 'string', 'max:100'],
+            'action' => ['sometimes', 'string', 'max:80'],
+            'target_type' => ['sometimes', 'string', 'max:40'],
+        ]);
+
+        return AdminAuditLog::query()
+            ->with('admin:id,name,email,admin_role')
+            ->when(filled($data['action'] ?? null), fn ($query) => $query->where('action', $data['action']))
+            ->when(filled($data['target_type'] ?? null), fn ($query) => $query->where('target_type', $data['target_type']))
+            ->when(filled($data['search'] ?? null), function ($query) use ($data): void {
+                $term = '%'.$data['search'].'%';
+
+                $query->where(function ($inner) use ($term): void {
+                    $inner->where('action', 'like', $term)
+                        ->orWhere('target_type', 'like', $term)
+                        ->orWhere('target_id', 'like', trim($term, '%'))
+                        ->orWhereHas('admin', function ($adminQuery) use ($term): void {
+                            $adminQuery->where('name', 'like', $term)
+                                ->orWhere('email', 'like', $term);
+                        });
+                });
+            })
+            ->latest();
+    }
+
+    private function formatAuditLog(AdminAuditLog $log): array
+    {
+        return [
+            'id' => $log->id,
+            'admin_name' => $log->admin?->name,
+            'admin_email' => $log->admin?->email,
+            'admin_role' => $log->admin?->admin_role,
+            'action' => $log->action,
+            'target_type' => $log->target_type,
+            'target_id' => $log->target_id,
+            'details' => $log->details ? json_decode($log->details, true) : null,
+            'created_at' => $log->created_at,
+        ];
     }
 
     private function formatAdminUser(User $user): array

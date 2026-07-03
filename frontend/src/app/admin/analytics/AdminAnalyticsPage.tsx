@@ -1,8 +1,14 @@
 ﻿"use client";
 
-import { adminDownload, adminGet, apiRoutes } from "@/lib/adminApi";
+import { adminDownload, adminGet, adminUpload, apiRoutes } from "@/lib/adminApi";
 import { useEffect, useMemo, useState } from "react";
-import { AdminExportButton, AdminFilterBar, AdminFilterField, adminInputClass } from "../AdminFilters";
+import {
+  AdminExportButton,
+  AdminFilterBar,
+  AdminFilterField,
+  AdminImportButton,
+  adminInputClass,
+} from "../AdminFilters";
 import { AdminModuleShell } from "../AdminModuleShell";
 
 type RatingsSummary = {
@@ -22,9 +28,16 @@ type RatingsSummary = {
   }>;
 };
 
+const importTemplate = `Name,Email,Role,Admin Role,Contact,Password
+TriWheel Operator,operator@example.com,admin,operator,09170000000,password123
+Pat Passenger,passenger@example.com,passenger,,09170000001,password123`;
+
 export default function AdminAnalyticsPage() {
   const [data, setData] = useState<RatingsSummary | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
   const [search, setSearch] = useState("");
   const [minRating, setMinRating] = useState("");
 
@@ -78,12 +91,54 @@ export default function AdminAnalyticsPage() {
     });
   }, [data?.recent, minRating, search]);
 
+  async function handleImportUsers(file: File) {
+    setIsImporting(true);
+    setError("");
+    setNotice("");
+    setImportErrors([]);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await adminUpload(apiRoutes.adminImportUsers, formData);
+      const payload = (await response.json()) as {
+        message?: string;
+        created?: number;
+        skipped?: number;
+        errors?: string[];
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Import failed.");
+      }
+
+      setNotice(payload.message ?? "Import finished.");
+      setImportErrors(payload.errors ?? []);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Import failed.");
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  function downloadTemplate() {
+    const blob = new Blob([importTemplate], { type: "text/csv;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "users-import-template.csv";
+    link.click();
+    URL.revokeObjectURL(objectUrl);
+  }
+
   return (
     <AdminModuleShell
-      description="Ratings averages and export tools for platform records."
+      description="Ratings averages, CSV exports, and bulk user import tools."
       title="Analytics & Exports"
     >
       {error ? <div className="mt-6 rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</div> : null}
+      {notice ? <div className="mt-6 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">{notice}</div> : null}
 
       <section className="mt-6 grid gap-4 md:grid-cols-2">
         <article className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -125,6 +180,36 @@ export default function AdminAnalyticsPage() {
             onExport={(filename) => adminDownload(apiRoutes.adminExportRides, filename)}
           />
         </div>
+      </section>
+
+      <section className="mt-6 rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <h2 className="text-xl font-black">CSV Import</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Import passenger or admin operator accounts from CSV. Required columns:{" "}
+          <span className="font-bold">Name, Email, Role, Password</span>. Optional: Admin Role, Contact.
+          Admin imports are limited to operator accounts.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <AdminImportButton
+            disabled={isImporting}
+            label={isImporting ? "Importing..." : "Import Users CSV"}
+            onImport={handleImportUsers}
+          />
+          <button
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-800"
+            onClick={downloadTemplate}
+            type="button"
+          >
+            Download Template
+          </button>
+        </div>
+        {importErrors.length ? (
+          <ul className="mt-4 space-y-1 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">
+            {importErrors.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : null}
       </section>
 
       <AdminFilterBar>

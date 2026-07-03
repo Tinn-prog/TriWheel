@@ -103,8 +103,50 @@ export async function adminPatch(path: string, body: Record<string, unknown>) {
   });
 }
 
-export async function adminDownload(path: string, filename: string) {
-  const response = await adminGet(path);
+export async function adminPost(path: string, body: Record<string, unknown>) {
+  const userId = getAdminUserId();
+
+  if (!userId && !readStoredToken()) {
+    throw new Error("Admin session required.");
+  }
+
+  return apiFetch(buildAdminUrl(path), {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...(userId ? { user_id: userId } : {}),
+      ...body,
+    }),
+  });
+}
+
+export async function adminUpload(path: string, formData: FormData) {
+  const userId = getAdminUserId();
+
+  if (!userId && !readStoredToken()) {
+    throw new Error("Admin session required.");
+  }
+
+  if (userId) {
+    formData.append("user_id", String(userId));
+  }
+
+  return apiFetch(buildAdminUrl(path), {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: formData,
+  });
+}
+
+export async function adminDownload(
+  path: string,
+  filename: string,
+  params?: Record<string, string | boolean | undefined>,
+) {
+  const response = await adminGet(path, params);
 
   if (!response.ok) {
     const data = (await response.json()) as { message?: string };

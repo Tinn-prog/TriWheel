@@ -54,6 +54,7 @@ Route::post('/driver/register', [AuthController::class, 'registerDriver']);
 
 Route::get('/admin/overview', [AdminController::class, 'overview']);
 Route::get('/admin/users', [AdminController::class, 'users']);
+Route::post('/admin/users', [AdminManagementController::class, 'storeAdminUser']);
 Route::get('/admin/passengers', [AdminController::class, 'passengers']);
 Route::patch('/admin/passengers/{user}/verification', [AdminController::class, 'updatePassengerVerification']);
 Route::patch('/admin/passengers/{user}', [AdminController::class, 'updatePassengerDetails']);
@@ -80,6 +81,8 @@ Route::patch('/admin/users/{user}/suspend', [AdminManagementController::class, '
 Route::get('/admin/export/users', [AdminManagementController::class, 'exportUsers']);
 Route::get('/admin/export/drivers', [AdminManagementController::class, 'exportDrivers']);
 Route::get('/admin/export/rides', [AdminManagementController::class, 'exportRides']);
+Route::get('/admin/export/audit-logs', [AdminManagementController::class, 'exportAuditLogs']);
+Route::post('/admin/import/users', [AdminManagementController::class, 'importUsers']);
 
 Route::get('/driver/overview', [DriverController::class, 'overview']);
 Route::post('/driver/suspension-appeal', [DriverController::class, 'submitSuspensionAppeal']);

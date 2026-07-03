@@ -141,6 +141,8 @@ export const apiRoutes = {
   adminExportUsers: `${API_URL}/admin/export/users`,
   adminExportDrivers: `${API_URL}/admin/export/drivers`,
   adminExportRides: `${API_URL}/admin/export/rides`,
+  adminExportAuditLogs: `${API_URL}/admin/export/audit-logs`,
+  adminImportUsers: `${API_URL}/admin/import/users`,
   driverOverview: `${API_URL}/driver/overview`,
   driverAutoAccept: `${API_URL}/driver/auto-accept`,
   driverRegister: `${API_URL}/driver/register`,

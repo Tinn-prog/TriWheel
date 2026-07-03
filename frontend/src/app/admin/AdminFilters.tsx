@@ -64,3 +64,38 @@ export function AdminExportButton({
     </button>
   );
 }
+
+export function AdminImportButton({
+  accept = ".csv,text/csv",
+  disabled = false,
+  label,
+  onImport,
+}: {
+  accept?: string;
+  disabled?: boolean;
+  label: string;
+  onImport: (file: File) => Promise<void>;
+}) {
+  return (
+    <label className={`inline-flex cursor-pointer rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-800 ${disabled ? "opacity-60" : ""}`}>
+      {label}
+      <input
+        accept={accept}
+        className="hidden"
+        disabled={disabled}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+
+          if (!file) {
+            return;
+          }
+
+          void onImport(file).finally(() => {
+            event.target.value = "";
+          });
+        }}
+        type="file"
+      />
+    </label>
+  );
+}
