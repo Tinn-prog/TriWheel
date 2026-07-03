@@ -68,7 +68,7 @@ export default function SuperAdminOverviewPage() {
       detail: "Ratings, reports, and CSV exports",
     },
     {
-      href: "/admin",
+      href: "/superadmin/operations",
       label: "Operations Console",
       value: overview?.stats.rides.ongoing ?? "—",
       detail: "Drivers, passengers, rides, and emergency response",

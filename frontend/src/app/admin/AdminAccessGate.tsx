@@ -111,12 +111,25 @@ export function AdminAccessGate({ children }: { children: ReactNode }) {
   const { isChecking, user } = useStoredTriWheelSession();
 
   useEffect(() => {
-    if (!isChecking && user?.role !== "admin") {
+    if (isChecking) {
+      return;
+    }
+
+    if (user?.role !== "admin") {
       router.replace(loginPathForPortal("admin"));
+      return;
+    }
+
+    if (user.admin_role === "super_admin") {
+      router.replace("/superadmin");
     }
   }, [isChecking, router, user]);
 
-  if (isChecking || user?.role !== "admin") {
+  if (
+    isChecking ||
+    user?.role !== "admin" ||
+    user.admin_role === "super_admin"
+  ) {
     return <AccessCheckingScreen portal="admin" title="Checking session..." />;
   }
 
@@ -138,7 +151,7 @@ export function SuperAdminAccessGate({ children }: { children: ReactNode }) {
     }
 
     if (user.admin_role !== "super_admin") {
-      router.replace("/admin");
+      router.replace(loginPathForPortal("admin"));
     }
   }, [isChecking, router, user]);
 

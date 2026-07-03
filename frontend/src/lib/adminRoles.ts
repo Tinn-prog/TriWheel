@@ -12,13 +12,13 @@ export const operatorNavItems = [
 
 export const superAdminNavItems = [
   { href: "/superadmin", label: "Governance" },
-  { href: "/admin", label: "Operations Overview" },
-  { href: "/admin/emergency", label: "Emergency" },
-  { href: "/admin/map", label: "Live Map" },
-  { href: "/admin/drivers", label: "Drivers" },
-  { href: "/admin/passengers", label: "Passengers" },
-  { href: "/admin/rides", label: "Rides" },
-  { href: "/admin/reports", label: "Reports" },
+  { href: "/superadmin/operations", label: "Operations Overview" },
+  { href: "/superadmin/emergency", label: "Emergency" },
+  { href: "/superadmin/map", label: "Live Map" },
+  { href: "/superadmin/drivers", label: "Drivers" },
+  { href: "/superadmin/passengers", label: "Passengers" },
+  { href: "/superadmin/rides", label: "Rides" },
+  { href: "/superadmin/reports", label: "Reports" },
   { href: "/superadmin/users", label: "User Accounts" },
   { href: "/superadmin/settings", label: "Platform Settings" },
   { href: "/superadmin/audit", label: "Audit Log" },
@@ -45,11 +45,11 @@ export function adminHomeForRole(adminRole?: string | null) {
 }
 
 export function loginPathForAdminRole(adminRole?: string | null) {
-  return adminRole === "super_admin" ? "/login?role=superadmin" : "/login?role=admin";
+  return adminRole === "super_admin" ? "/superadmin/login" : "/admin/login";
 }
 
 export function loginPathForPortal(portal: AdminPortal) {
-  return portal === "superadmin" ? "/login?role=superadmin" : "/login?role=admin";
+  return portal === "superadmin" ? "/superadmin/login" : "/admin/login";
 }
 
 export function portalFromLoginRole(role?: string | null): AdminPortal | null {

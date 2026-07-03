@@ -40,6 +40,14 @@ export function resolveNotificationHref(
     return "/driver";
   }
 
+  if (actionUrl.startsWith("/admin/login")) {
+    return adminHomeForRole("operator");
+  }
+
+  if (actionUrl.startsWith("/superadmin/login")) {
+    return adminHomeForRole("super_admin");
+  }
+
   if (actionUrl.includes("role=superadmin")) {
     return adminHomeForRole("super_admin");
   }

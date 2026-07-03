@@ -7,16 +7,11 @@ import {
 } from "@/lib/adminRoles";
 import { logoutTriWheel } from "@/lib/logout";
 import { LogoutConfirmButton } from "@/components/LogoutConfirmButton";
-import Link from "next/link";
 import { useStoredTriWheelSession } from "./AdminAccessGate";
 
 export function AdminUserPanel({ portal = "admin" }: { portal?: AdminPortal }) {
   const { user } = useStoredTriWheelSession();
   const roleLabel = formatAdminRoleLabel(user?.admin_role);
-  const alternatePortal =
-    user?.admin_role === "super_admin"
-      ? { href: portal === "superadmin" ? "/admin" : "/superadmin", label: portal === "superadmin" ? "Open Operations Console" : "Open Super Admin Console" }
-      : null;
 
   function handleLogout() {
     void logoutTriWheel(loginPathForAdminRole(user?.admin_role));
@@ -36,14 +31,6 @@ export function AdminUserPanel({ portal = "admin" }: { portal?: AdminPortal }) {
         {user?.email ?? "admin account"}
       </div>
       <p className="mt-2 text-xs font-bold text-white/80">{roleLabel}</p>
-      {alternatePortal ? (
-        <Link
-          className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/15"
-          href={alternatePortal.href}
-        >
-          {alternatePortal.label}
-        </Link>
-      ) : null}
       <LogoutConfirmButton
         className={`mt-4 w-full rounded-2xl px-4 py-3 text-sm font-black text-white shadow-lg transition ${
           portal === "superadmin"
