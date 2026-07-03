@@ -2,8 +2,8 @@
 
 import { adminGet, adminPatch, apiRoutes, isSuperAdmin } from "@/lib/adminApi";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { adminInputClass } from "../AdminFilters";
+import { useEffect, useMemo, useState } from "react";
+import { adminInputClass, AdminFilterBar, AdminFilterField } from "../AdminFilters";
 import { SuperAdminPageGuard } from "../SuperAdminPageGuard";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
 
@@ -73,6 +73,9 @@ export default function AdminSettingsPage() {
   const [isSavingRoad, setIsSavingRoad] = useState(false);
   const [isSavingSystem, setIsSavingSystem] = useState(false);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
+  const [adminSearch, setAdminSearch] = useState("");
+  const [adminRoleFilter, setAdminRoleFilter] = useState("");
+  const [adminSuspendedFilter, setAdminSuspendedFilter] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -103,6 +106,32 @@ export default function AdminSettingsPage() {
 
     void load();
   }, []);
+
+  const filteredAdminAccounts = useMemo(() => {
+    const query = adminSearch.trim().toLowerCase();
+
+    return adminAccounts.filter((account) => {
+      if (adminRoleFilter && account.admin_role !== adminRoleFilter) {
+        return false;
+      }
+
+      if (adminSuspendedFilter === "yes" && !account.is_suspended) {
+        return false;
+      }
+
+      if (adminSuspendedFilter === "no" && account.is_suspended) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      return [account.name, account.email, account.admin_role]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
+  }, [adminAccounts, adminRoleFilter, adminSearch, adminSuspendedFilter]);
 
   async function saveFareRules() {
     if (!fareRules) {
@@ -421,6 +450,38 @@ export default function AdminSettingsPage() {
             Super admins can change roles in User Management. Operators have limited permissions
             based on the toggles above.
           </p>
+          <AdminFilterBar>
+            <AdminFilterField label="Search">
+              <input
+                className={adminInputClass()}
+                onChange={(event) => setAdminSearch(event.target.value)}
+                placeholder="Name or email..."
+                value={adminSearch}
+              />
+            </AdminFilterField>
+            <AdminFilterField label="Role">
+              <select
+                className={adminInputClass()}
+                onChange={(event) => setAdminRoleFilter(event.target.value)}
+                value={adminRoleFilter}
+              >
+                <option value="">All roles</option>
+                <option value="operator">Operator</option>
+                <option value="super_admin">Super Admin</option>
+              </select>
+            </AdminFilterField>
+            <AdminFilterField label="Status">
+              <select
+                className={adminInputClass()}
+                onChange={(event) => setAdminSuspendedFilter(event.target.value)}
+                value={adminSuspendedFilter}
+              >
+                <option value="">All</option>
+                <option value="no">Active</option>
+                <option value="yes">Suspended</option>
+              </select>
+            </AdminFilterField>
+          </AdminFilterBar>
           <div className="mt-4 overflow-hidden rounded-2xl ring-1 ring-slate-200">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
@@ -431,8 +492,8 @@ export default function AdminSettingsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {adminAccounts.length ? (
-                  adminAccounts.map((account) => (
+                {filteredAdminAccounts.length ? (
+                  filteredAdminAccounts.map((account) => (
                     <tr key={account.id}>
                       <td className="px-4 py-3">
                         <p className="font-bold text-slate-900">{account.name}</p>
@@ -453,7 +514,9 @@ export default function AdminSettingsPage() {
                 ) : (
                   <tr>
                     <td className="px-4 py-6 text-center text-slate-500" colSpan={3}>
-                      No admin accounts found.
+                      {adminAccounts.length
+                        ? "No admin accounts match these filters."
+                        : "No admin accounts found."}
                     </td>
                   </tr>
                 )}

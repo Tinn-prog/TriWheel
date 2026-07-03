@@ -3,7 +3,7 @@
 import { adminGet, adminPatch, apiRoutes, isSuperAdmin } from "@/lib/adminApi";
 import { formatAdminRoleLabel } from "@/lib/adminRoles";
 import { useCallback, useEffect, useState } from "react";
-import { AdminFilterBar, AdminFilterField, adminInputClass } from "../AdminFilters";
+import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
 import { SuperAdminPageGuard } from "../SuperAdminPageGuard";
 import { AdminRejectDialog } from "../AdminRejectDialog";
@@ -30,7 +30,10 @@ export function AdminUsersPage() {
   const [suspendTarget, setSuspendTarget] = useState<AdminUser | null>(null);
   const [busyUserId, setBusyUserId] = useState<number | null>(null);
   const [roleFilter, setRoleFilter] = useState("");
+  const [adminRoleFilter, setAdminRoleFilter] = useState("");
+  const [suspendedFilter, setSuspendedFilter] = useState("");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
   const [editForm, setEditForm] = useState({
     name: "",
     email: "",
@@ -43,7 +46,9 @@ export function AdminUsersPage() {
   const loadUsers = useCallback(async () => {
     const response = await adminGet(apiRoutes.adminUsers, {
       role: roleFilter || undefined,
-      search: search || undefined,
+      admin_role: adminRoleFilter || undefined,
+      suspended: suspendedFilter === "" ? undefined : suspendedFilter === "yes",
+      search: debouncedSearch || undefined,
     });
     const data = (await response.json()) as { message?: string; users?: AdminUser[] };
 
@@ -52,7 +57,7 @@ export function AdminUsersPage() {
     }
 
     setUsers(data.users ?? []);
-  }, [roleFilter, search]);
+  }, [adminRoleFilter, debouncedSearch, roleFilter, suspendedFilter]);
 
   useEffect(() => {
     void loadUsers().catch((caughtError) => {
@@ -144,6 +149,29 @@ export function AdminUsersPage() {
             <option value="admin">Admin</option>
             <option value="driver">Driver</option>
             <option value="passenger">Passenger</option>
+          </select>
+        </AdminFilterField>
+        <AdminFilterField label="Admin Role">
+          <select
+            className={adminInputClass()}
+            disabled={roleFilter !== "" && roleFilter !== "admin"}
+            onChange={(event) => setAdminRoleFilter(event.target.value)}
+            value={adminRoleFilter}
+          >
+            <option value="">All</option>
+            <option value="operator">Operator</option>
+            <option value="super_admin">Super Admin</option>
+          </select>
+        </AdminFilterField>
+        <AdminFilterField label="Suspended">
+          <select
+            className={adminInputClass()}
+            onChange={(event) => setSuspendedFilter(event.target.value)}
+            value={suspendedFilter}
+          >
+            <option value="">All</option>
+            <option value="no">Active</option>
+            <option value="yes">Suspended</option>
           </select>
         </AdminFilterField>
         <AdminFilterField label="Search">

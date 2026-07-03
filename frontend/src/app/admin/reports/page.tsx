@@ -3,6 +3,7 @@
 import { adminPatch, adminGet, apiRoutes } from "@/lib/adminApi";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell } from "../AdminModuleShell";
 import { AdminRejectDialog } from "../AdminRejectDialog";
 
@@ -141,6 +142,10 @@ function groupReportsByRide(reports: RideReport[]) {
 export default function AdminReportsPage() {
   const [reports, setReports] = useState<RideReport[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [emergencyOnly, setEmergencyOnly] = useState(false);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
@@ -150,10 +155,12 @@ export default function AdminReportsPage() {
   const [isSuspending, setIsSuspending] = useState(false);
 
   const loadReports = useCallback(async () => {
-    const response = await adminGet(
-      apiRoutes.adminReports,
-      statusFilter === "all" ? undefined : { status: statusFilter },
-    );
+    const response = await adminGet(apiRoutes.adminReports, {
+      status: statusFilter === "all" ? undefined : statusFilter,
+      severity: severityFilter || undefined,
+      emergency: emergencyOnly || undefined,
+      search: debouncedSearch || undefined,
+    });
     const data = (await response.json()) as {
       reports?: RideReport[];
       message?: string;
@@ -164,7 +171,7 @@ export default function AdminReportsPage() {
     }
 
     setReports(data.reports ?? []);
-  }, [statusFilter]);
+  }, [debouncedSearch, emergencyOnly, severityFilter, statusFilter]);
 
   useEffect(() => {
     async function load() {
@@ -274,6 +281,41 @@ export default function AdminReportsPage() {
           {notice}
         </div>
       ) : null}
+
+      <AdminFilterBar>
+        <AdminFilterField label="Search">
+          <input
+            className={adminInputClass()}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Ride ID, reporter, reason..."
+            value={search}
+          />
+        </AdminFilterField>
+        <AdminFilterField label="Severity">
+          <select
+            className={adminInputClass()}
+            onChange={(event) => setSeverityFilter(event.target.value)}
+            value={severityFilter}
+          >
+            <option value="">All severities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </AdminFilterField>
+        <AdminFilterField label="Emergency">
+          <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700">
+            <input
+              checked={emergencyOnly}
+              className="size-4 accent-orange-600"
+              onChange={(event) => setEmergencyOnly(event.target.checked)}
+              type="checkbox"
+            />
+            Emergency rides only
+          </label>
+        </AdminFilterField>
+      </AdminFilterBar>
 
       <section className="mt-6 flex flex-wrap gap-2">
         {(

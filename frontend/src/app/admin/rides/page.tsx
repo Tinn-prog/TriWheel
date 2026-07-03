@@ -2,7 +2,7 @@
 
 import { adminGet, adminPatch, apiRoutes } from "@/lib/adminApi";
 import { useCallback, useEffect, useState } from "react";
-import { AdminFilterBar, AdminFilterField, adminInputClass } from "../AdminFilters";
+import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
 
 type Ride = {
@@ -31,6 +31,7 @@ export default function AdminRidesPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [emergencyOnly, setEmergencyOnly] = useState(false);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
   const [reassignRideId, setReassignRideId] = useState<number | null>(null);
   const [selectedDriverId, setSelectedDriverId] = useState("");
 
@@ -38,7 +39,7 @@ export default function AdminRidesPage() {
     const response = await adminGet(apiRoutes.adminRides, {
       status: statusFilter || undefined,
       emergency: emergencyOnly || undefined,
-      search: search || undefined,
+      search: debouncedSearch || undefined,
     });
     const data = (await response.json()) as { message?: string; rides?: Ride[] };
 
@@ -47,7 +48,7 @@ export default function AdminRidesPage() {
     }
 
     setRides(data.rides ?? []);
-  }, [emergencyOnly, search, statusFilter]);
+  }, [debouncedSearch, emergencyOnly, statusFilter]);
 
   useEffect(() => {
     void loadRides().catch((caughtError) => {

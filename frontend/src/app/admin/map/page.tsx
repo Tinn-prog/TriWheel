@@ -2,7 +2,8 @@
 
 import { adminGet, apiRoutes } from "@/lib/adminApi";
 import { useLiveDashboardRefresh } from "@/hooks/useLiveDashboardRefresh";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AdminFilterBar, AdminFilterField, adminInputClass } from "../AdminFilters";
 import { AdminModuleShell } from "../AdminModuleShell";
 import dynamic from "next/dynamic";
 
@@ -31,6 +32,8 @@ export default function AdminLiveMapPage() {
   const [error, setError] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [liveGpsFreshMinutes, setLiveGpsFreshMinutes] = useState(3);
+  const [search, setSearch] = useState("");
+  const [vehicleTypeFilter, setVehicleTypeFilter] = useState("");
 
   const loadDrivers = useCallback(async () => {
     const response = await adminGet(apiRoutes.adminDriverLocations);
@@ -73,7 +76,37 @@ export default function AdminLiveMapPage() {
     5000,
   );
 
-  const center = drivers[0] ? { lat: drivers[0].lat, lng: drivers[0].lng } : defaultCenter;
+  const filteredDrivers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return drivers.filter((driver) => {
+      if (vehicleTypeFilter && driver.vehicle_type !== vehicleTypeFilter) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      return [driver.name, driver.plate_number, driver.phone, driver.vehicle_type]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
+  }, [drivers, search, vehicleTypeFilter]);
+
+  const vehicleTypes = useMemo(
+    () =>
+      Array.from(
+        new Set(drivers.map((driver) => driver.vehicle_type).filter(Boolean)),
+      ) as string[],
+    [drivers],
+  );
+
+  const center = filteredDrivers[0]
+    ? { lat: filteredDrivers[0].lat, lng: filteredDrivers[0].lng }
+    : drivers[0]
+      ? { lat: drivers[0].lat, lng: drivers[0].lng }
+      : defaultCenter;
 
   return (
     <AdminModuleShell
@@ -82,10 +115,35 @@ export default function AdminLiveMapPage() {
     >
       {error ? <div className="mt-6 rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</div> : null}
 
+      <AdminFilterBar>
+        <AdminFilterField label="Search">
+          <input
+            className={adminInputClass()}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Driver name, plate, phone..."
+            value={search}
+          />
+        </AdminFilterField>
+        <AdminFilterField label="Vehicle Type">
+          <select
+            className={adminInputClass()}
+            onChange={(event) => setVehicleTypeFilter(event.target.value)}
+            value={vehicleTypeFilter}
+          >
+            <option value="">All types</option>
+            {vehicleTypes.map((vehicleType) => (
+              <option key={vehicleType} value={vehicleType}>
+                {vehicleType}
+              </option>
+            ))}
+          </select>
+        </AdminFilterField>
+      </AdminFilterBar>
+
       <section className="mt-6 overflow-hidden rounded-[2rem] bg-white shadow-sm ring-1 ring-slate-200">
         <div className="border-b border-slate-200 px-5 py-4">
           <p className="text-sm font-bold text-slate-600">
-            {drivers.length} online driver{drivers.length === 1 ? "" : "s"} with live GPS
+            {filteredDrivers.length} of {drivers.length} online driver{drivers.length === 1 ? "" : "s"} shown
           </p>
           <p className="mt-1 text-xs text-slate-500">
             Counts approved drivers marked online with a GPS ping in the last{" "}
@@ -96,7 +154,7 @@ export default function AdminLiveMapPage() {
           </p>
         </div>
 
-        <AdminLiveLeafletMap center={center} drivers={drivers} />
+        <AdminLiveLeafletMap center={center} drivers={filteredDrivers} />
       </section>
     </AdminModuleShell>
   );

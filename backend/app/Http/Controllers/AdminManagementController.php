@@ -337,8 +337,29 @@ class AdminManagementController extends Controller
     {
         $this->requireSuperAdmin($request);
 
+        $data = $request->validate([
+            'search' => ['sometimes', 'string', 'max:100'],
+            'action' => ['sometimes', 'string', 'max:80'],
+            'target_type' => ['sometimes', 'string', 'max:40'],
+        ]);
+
         $logs = AdminAuditLog::query()
             ->with('admin:id,name,email,admin_role')
+            ->when(filled($data['action'] ?? null), fn ($query) => $query->where('action', $data['action']))
+            ->when(filled($data['target_type'] ?? null), fn ($query) => $query->where('target_type', $data['target_type']))
+            ->when(filled($data['search'] ?? null), function ($query) use ($data): void {
+                $term = '%'.$data['search'].'%';
+
+                $query->where(function ($inner) use ($term, $data): void {
+                    $inner->where('action', 'like', $term)
+                        ->orWhere('target_type', 'like', $term)
+                        ->orWhere('target_id', 'like', trim($term, '%'))
+                        ->orWhereHas('admin', function ($adminQuery) use ($term): void {
+                            $adminQuery->where('name', 'like', $term)
+                                ->orWhere('email', 'like', $term);
+                        });
+                });
+            })
             ->latest()
             ->limit(200)
             ->get()
@@ -623,7 +644,12 @@ class AdminManagementController extends Controller
     {
         $this->requireAdmin($request);
 
-        $statusFilter = $request->query('status');
+        $data = $request->validate([
+            'status' => ['sometimes', Rule::in(['pending', 'reviewed', 'dismissed'])],
+            'search' => ['sometimes', 'string', 'max:100'],
+            'severity' => ['sometimes', Rule::in(['critical', 'high', 'medium', 'low'])],
+            'emergency' => ['sometimes', 'boolean'],
+        ]);
 
         $reportsQuery = RideReport::query()
             ->with([
@@ -633,8 +659,33 @@ class AdminManagementController extends Controller
             ])
             ->latest();
 
-        if (is_string($statusFilter) && in_array($statusFilter, ['pending', 'reviewed', 'dismissed'], true)) {
-            $reportsQuery->where('status', $statusFilter);
+        if (filled($data['status'] ?? null)) {
+            $reportsQuery->where('status', $data['status']);
+        }
+
+        if (filled($data['severity'] ?? null)) {
+            $reportsQuery->whereIn('report_reason_code', RideReportReasons::codesForSeverity($data['severity']));
+        }
+
+        if ($request->boolean('emergency')) {
+            $reportsQuery->whereHas('ride', fn ($rideQuery) => $rideQuery->where('is_emergency', true));
+        }
+
+        if (filled($data['search'] ?? null)) {
+            $term = '%'.$data['search'].'%';
+
+            $reportsQuery->where(function ($query) use ($term): void {
+                $query->where('report_reason', 'like', $term)
+                    ->orWhere('ride_id', 'like', trim($term, '%'))
+                    ->orWhereHas('reporter', function ($reporterQuery) use ($term): void {
+                        $reporterQuery->where('name', 'like', $term)
+                            ->orWhere('email', 'like', $term);
+                    })
+                    ->orWhereHas('reportedUser', function ($reportedQuery) use ($term): void {
+                        $reportedQuery->where('name', 'like', $term)
+                            ->orWhere('email', 'like', $term);
+                    });
+            });
         }
 
         $reports = $reportsQuery

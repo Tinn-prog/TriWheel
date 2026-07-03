@@ -116,6 +116,7 @@ class AdminController extends Controller
                     });
                 })
                 ->when($request->filled('role'), fn ($query) => $query->where('role', $request->string('role')))
+                ->when($request->filled('admin_role'), fn ($query) => $query->where('admin_role', $request->string('admin_role')))
                 ->when($request->has('suspended'), fn ($query) => $query->where('is_suspended', $request->boolean('suspended')))
                 ->withCount(['rides'])
                 ->latest()
@@ -157,6 +158,7 @@ class AdminController extends Controller
                     });
                 })
                 ->when($request->has('verified'), fn ($query) => $query->where('is_verified', $request->boolean('verified')))
+                ->when($request->has('suspended'), fn ($query) => $query->where('is_suspended', $request->boolean('suspended')))
                 ->withCount(['rides'])
                 ->latest()
                 ->get()
@@ -224,6 +226,7 @@ class AdminController extends Controller
             'drivers' => Driver::query()
                 ->with(['user:id,name,email,contact_number,is_verified,is_suspended,suspension_reason,created_at', 'vehicle:id,driver_id,vehicle_type,plate_number,color,body_number,vehicle_photo,orcr_file,registration_expiry_date'])
                 ->when($request->filled('approval_status'), fn ($query) => $query->where('approval_status', $request->string('approval_status')))
+                ->when($request->filled('online_status'), fn ($query) => $query->where('status', $request->string('online_status')))
                 ->when($request->filled('search'), function ($query) use ($request): void {
                     $term = '%'.$request->string('search').'%';
                     $query->where(function ($inner) use ($term): void {

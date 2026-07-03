@@ -5,7 +5,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useLiveDashboardRefresh } from "@/hooks/useLiveDashboardRefresh";
 import { useCallback, useEffect, useState } from "react";
 import { AdminRejectDialog } from "../AdminRejectDialog";
-import { AdminFilterBar, AdminFilterField, adminInputClass } from "../AdminFilters";
+import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
 import { AdminDocumentRow } from "../adminUi";
 
@@ -86,7 +86,9 @@ export default function AdminDriversPage() {
     driver: Driver;
   } | null>(null);
   const [approvalFilter, setApprovalFilter] = useState("pending");
+  const [onlineStatusFilter, setOnlineStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
 
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get("approval_status");
@@ -99,7 +101,8 @@ export default function AdminDriversPage() {
   const loadDrivers = useCallback(async () => {
     const response = await adminGet(apiRoutes.adminDrivers, {
       approval_status: approvalFilter || undefined,
-      search: search || undefined,
+      online_status: onlineStatusFilter || undefined,
+      search: debouncedSearch || undefined,
     });
     const data = (await response.json()) as {
       drivers?: Driver[];
@@ -112,7 +115,7 @@ export default function AdminDriversPage() {
 
     setDrivers(data.drivers ?? []);
     setError("");
-  }, [approvalFilter, search]);
+  }, [approvalFilter, debouncedSearch, onlineStatusFilter]);
 
   const refreshDrivers = useCallback(async () => {
     setIsRefreshing(true);
@@ -270,6 +273,17 @@ export default function AdminDriversPage() {
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
+          </select>
+        </AdminFilterField>
+        <AdminFilterField label="Online Status">
+          <select
+            className={adminInputClass()}
+            onChange={(event) => setOnlineStatusFilter(event.target.value)}
+            value={onlineStatusFilter}
+          >
+            <option value="">All</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
           </select>
         </AdminFilterField>
         <AdminFilterField label="Search">

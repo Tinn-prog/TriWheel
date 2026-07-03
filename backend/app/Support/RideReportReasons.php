@@ -104,6 +104,19 @@ class RideReportReasons
         return 'low';
     }
 
+    /**
+     * @return list<string>
+     */
+    public static function codesForSeverity(string $severity): array
+    {
+        $codes = array_unique(array_merge(self::PASSENGER_CODES, self::DRIVER_CODES));
+
+        return array_values(array_filter(
+            $codes,
+            fn (string $code): bool => self::severity($code) === $severity,
+        ));
+    }
+
     public static function viewerFlags(Ride $ride, \App\Models\User $user, ?Driver $driver = null): array
     {
         $reportSubmitted = RideReport::query()

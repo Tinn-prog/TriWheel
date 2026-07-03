@@ -2,7 +2,7 @@
 
 import { adminGet, adminPatch, apiRoutes } from "@/lib/adminApi";
 import { useCallback, useEffect, useState } from "react";
-import { AdminFilterBar, AdminFilterField, adminInputClass } from "../AdminFilters";
+import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
 import { AdminRejectDialog } from "../AdminRejectDialog";
 import { AdminDocumentRow } from "../adminUi";
@@ -42,10 +42,15 @@ export default function AdminPassengersPage() {
     emergency_contact_number: "",
   });
   const [search, setSearch] = useState("");
+  const [verifiedFilter, setVerifiedFilter] = useState("");
+  const [suspendedFilter, setSuspendedFilter] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
 
   const loadPassengers = useCallback(async () => {
     const response = await adminGet(apiRoutes.adminPassengers, {
-      search: search || undefined,
+      search: debouncedSearch || undefined,
+      verified: verifiedFilter === "" ? undefined : verifiedFilter === "yes",
+      suspended: suspendedFilter === "" ? undefined : suspendedFilter === "yes",
     });
     const data = (await response.json()) as {
       message?: string;
@@ -57,7 +62,7 @@ export default function AdminPassengersPage() {
     }
 
     setPassengers(data.passengers ?? []);
-  }, [search]);
+  }, [debouncedSearch, suspendedFilter, verifiedFilter]);
 
   useEffect(() => {
     void loadPassengers().catch((caughtError) => {
@@ -152,6 +157,28 @@ export default function AdminPassengersPage() {
             placeholder="Name or email..."
             value={search}
           />
+        </AdminFilterField>
+        <AdminFilterField label="Verified">
+          <select
+            className={adminInputClass()}
+            onChange={(event) => setVerifiedFilter(event.target.value)}
+            value={verifiedFilter}
+          >
+            <option value="">All</option>
+            <option value="yes">Verified</option>
+            <option value="no">Unverified</option>
+          </select>
+        </AdminFilterField>
+        <AdminFilterField label="Account">
+          <select
+            className={adminInputClass()}
+            onChange={(event) => setSuspendedFilter(event.target.value)}
+            value={suspendedFilter}
+          >
+            <option value="">All</option>
+            <option value="no">Active</option>
+            <option value="yes">Deactivated</option>
+          </select>
         </AdminFilterField>
       </AdminFilterBar>
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { adminGet, adminPatch, apiRoutes } from "@/lib/adminApi";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
 
 type EmergencyRide = {
@@ -21,9 +22,17 @@ export default function AdminEmergencyPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busyRideId, setBusyRideId] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [showCompleted, setShowCompleted] = useState(false);
+  const debouncedSearch = useDebouncedValue(search);
 
   const loadRides = useCallback(async () => {
-    const response = await adminGet(apiRoutes.adminRides, { emergency: true });
+    const response = await adminGet(apiRoutes.adminRides, {
+      emergency: true,
+      status: statusFilter || undefined,
+      search: debouncedSearch || undefined,
+    });
     const data = (await response.json()) as {
       rides?: EmergencyRide[];
       message?: string;
@@ -34,7 +43,7 @@ export default function AdminEmergencyPage() {
     }
 
     setRides(data.rides ?? []);
-  }, []);
+  }, [debouncedSearch, statusFilter]);
 
   useEffect(() => {
     void loadRides().catch((caughtError) => {
@@ -70,7 +79,15 @@ export default function AdminEmergencyPage() {
     }
   }
 
-  const active = rides.filter((ride) => !["completed", "cancelled"].includes(ride.status));
+  const active = useMemo(
+    () => rides.filter((ride) => !["completed", "cancelled"].includes(ride.status)),
+    [rides],
+  );
+
+  const visibleRides = useMemo(
+    () => (showCompleted ? rides : active),
+    [active, rides, showCompleted],
+  );
 
   return (
     <AdminModuleShell
@@ -79,6 +96,42 @@ export default function AdminEmergencyPage() {
     >
       {error ? <div className="mt-6 rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</div> : null}
       {notice ? <div className="mt-6 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">{notice}</div> : null}
+
+      <AdminFilterBar>
+        <AdminFilterField label="Search">
+          <input
+            className={adminInputClass()}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Ride ID, passenger, address..."
+            value={search}
+          />
+        </AdminFilterField>
+        <AdminFilterField label="Status">
+          <select
+            className={adminInputClass()}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            value={statusFilter}
+          >
+            <option value="">All statuses</option>
+            <option value="requested">Requested</option>
+            <option value="accepted">Accepted</option>
+            <option value="ongoing">Ongoing</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </AdminFilterField>
+        <AdminFilterField label="View">
+          <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700">
+            <input
+              checked={showCompleted}
+              className="size-4 accent-orange-600"
+              onChange={(event) => setShowCompleted(event.target.checked)}
+              type="checkbox"
+            />
+            Include completed / cancelled
+          </label>
+        </AdminFilterField>
+      </AdminFilterBar>
 
       <section className="mt-6 grid gap-3 sm:grid-cols-3">
         <article className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
@@ -96,7 +149,7 @@ export default function AdminEmergencyPage() {
       </section>
 
       <section className="mt-6 grid gap-4">
-        {active.map((ride) => (
+        {visibleRides.map((ride) => (
           <article className="rounded-[2rem] border border-red-200 bg-white p-5 shadow-sm" key={ride.id}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -126,9 +179,9 @@ export default function AdminEmergencyPage() {
             ) : null}
           </article>
         ))}
-        {!active.length ? (
+        {!visibleRides.length ? (
           <div className="rounded-[2rem] bg-white p-8 text-center font-black shadow-sm ring-1 ring-slate-200">
-            No active emergency rides right now.
+            No emergency rides match these filters.
           </div>
         ) : null}
       </section>
