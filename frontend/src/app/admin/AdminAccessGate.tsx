@@ -151,7 +151,7 @@ export function SuperAdminAccessGate({ children }: { children: ReactNode }) {
     }
 
     if (user.admin_role !== "super_admin") {
-      router.replace(loginPathForPortal("admin"));
+      router.replace(adminHomeForRole(user.admin_role));
     }
   }, [isChecking, router, user]);
 

@@ -19,8 +19,9 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $password = Hash::make('password123');
+        $verifiedAt = now();
 
-        User::updateOrCreate([
+        $this->seedTestUser([
             'email' => 'admin@triwheel.test',
         ], [
             'name' => 'TriWheel Super Admin',
@@ -32,9 +33,9 @@ class DatabaseSeeder extends Seeder
             'admin_role' => 'super_admin',
             'is_verified' => true,
             'password' => $password,
-        ]);
+        ], $verifiedAt);
 
-        User::updateOrCreate([
+        $this->seedTestUser([
             'email' => 'operator@triwheel.test',
         ], [
             'name' => 'TriWheel Admin Operator',
@@ -46,9 +47,9 @@ class DatabaseSeeder extends Seeder
             'admin_role' => 'operator',
             'is_verified' => true,
             'password' => $password,
-        ]);
+        ], $verifiedAt);
 
-        User::updateOrCreate([
+        $this->seedTestUser([
             'email' => 'passenger@triwheel.test',
         ], [
             'name' => 'Pat Passenger',
@@ -59,9 +60,9 @@ class DatabaseSeeder extends Seeder
             'role' => 'passenger',
             'is_verified' => true,
             'password' => $password,
-        ]);
+        ], $verifiedAt);
 
-        $driverUser = User::updateOrCreate([
+        $driverUser = $this->seedTestUser([
             'email' => 'driver@triwheel.test',
         ], [
             'name' => 'Drew Driver',
@@ -72,7 +73,7 @@ class DatabaseSeeder extends Seeder
             'role' => 'driver',
             'is_verified' => true,
             'password' => $password,
-        ]);
+        ], $verifiedAt);
 
         $driver = Driver::updateOrCreate([
             'user_id' => $driverUser->id,
@@ -96,5 +97,20 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call(PlatformSettingsSeeder::class);
+    }
+
+    /**
+     * @param  array<string, mixed>  $keys
+     * @param  array<string, mixed>  $values
+     */
+    private function seedTestUser(array $keys, array $values, \DateTimeInterface $verifiedAt): User
+    {
+        $user = User::updateOrCreate($keys, $values);
+
+        if (! $user->email_verified_at) {
+            $user->forceFill(['email_verified_at' => $verifiedAt])->save();
+        }
+
+        return $user;
     }
 }
