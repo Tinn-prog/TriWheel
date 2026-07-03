@@ -1,9 +1,8 @@
-"use client";
+﻿"use client";
 
 import { adminGet, apiRoutes } from "@/lib/adminApi";
 import { formatAuditAction, formatAuditDetailLines } from "@/lib/formatAuditDetails";
 import { useEffect, useState } from "react";
-import { SuperAdminPageGuard } from "../SuperAdminPageGuard";
 import { AdminModuleShell } from "../AdminModuleShell";
 
 type AuditLog = {
@@ -42,7 +41,6 @@ export default function AdminAuditPage() {
   }, []);
 
   return (
-    <SuperAdminPageGuard>
     <AdminModuleShell
       description="Review admin actions across verification, rides, users, and settings."
       title="Audit Log"
@@ -83,7 +81,7 @@ export default function AdminAuditPage() {
                         const lines = formatAuditDetailLines(log.action, log.details);
 
                         if (!lines.length) {
-                          return <span className="text-slate-400">—</span>;
+                          return <span className="text-slate-400">ΓÇö</span>;
                         }
 
                         return (
@@ -100,7 +98,7 @@ export default function AdminAuditPage() {
                         );
                       })()
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <span className="text-slate-400">ΓÇö</span>
                     )}
                   </td>
                 </tr>
@@ -110,6 +108,5 @@ export default function AdminAuditPage() {
         </div>
       </section>
     </AdminModuleShell>
-    </SuperAdminPageGuard>
   );
 }

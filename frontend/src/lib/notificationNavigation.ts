@@ -1,13 +1,14 @@
+import { adminHomeForRole } from "@/lib/adminRoles";
 import { parseStoredTriWheelUser } from "@/app/admin/AdminAccessGate";
 import { readStoredUserRaw } from "@/lib/authStorage";
 
-export function dashboardPathForRole(role?: string) {
+export function dashboardPathForRole(role?: string, adminRole?: string | null) {
   if (role === "driver") {
     return "/driver";
   }
 
   if (role === "admin") {
-    return "/admin";
+    return adminHomeForRole(adminRole);
   }
 
   return "/passenger";
@@ -39,9 +40,13 @@ export function resolveNotificationHref(
     return "/driver";
   }
 
-  if (actionUrl.includes("role=admin")) {
-    return "/admin";
+  if (actionUrl.includes("role=superadmin")) {
+    return adminHomeForRole("super_admin");
   }
 
-  return dashboardPathForRole(storedUser.role);
+  if (actionUrl.includes("role=admin")) {
+    return adminHomeForRole(storedUser.admin_role);
+  }
+
+  return dashboardPathForRole(storedUser.role, storedUser.admin_role);
 }

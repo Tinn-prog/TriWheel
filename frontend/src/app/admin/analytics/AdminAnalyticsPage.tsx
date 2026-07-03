@@ -1,9 +1,8 @@
-"use client";
+﻿"use client";
 
 import { adminDownload, adminGet, apiRoutes } from "@/lib/adminApi";
 import { useEffect, useState } from "react";
 import { AdminExportButton } from "../AdminFilters";
-import { SuperAdminPageGuard } from "../SuperAdminPageGuard";
 import { AdminModuleShell } from "../AdminModuleShell";
 
 type RatingsSummary = {
@@ -47,7 +46,6 @@ export default function AdminAnalyticsPage() {
   }, []);
 
   return (
-    <SuperAdminPageGuard>
     <AdminModuleShell
       description="Ratings averages and export tools for platform records."
       title="Analytics & Exports"
@@ -56,18 +54,18 @@ export default function AdminAnalyticsPage() {
 
       <section className="mt-6 grid gap-4 md:grid-cols-2">
         <article className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-200">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Passenger → Driver</p>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Passenger ΓåÆ Driver</p>
           <p className="mt-2 text-4xl font-black">
-            {data?.summary.passenger_to_driver.average?.toFixed(2) ?? "—"}
+            {data?.summary.passenger_to_driver.average?.toFixed(2) ?? "ΓÇö"}
           </p>
           <p className="mt-1 text-sm text-slate-500">
             {data?.summary.passenger_to_driver.count ?? 0} ratings
           </p>
         </article>
         <article className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-200">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Driver → Passenger</p>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Driver ΓåÆ Passenger</p>
           <p className="mt-2 text-4xl font-black">
-            {data?.summary.driver_to_passenger.average?.toFixed(2) ?? "—"}
+            {data?.summary.driver_to_passenger.average?.toFixed(2) ?? "ΓÇö"}
           </p>
           <p className="mt-1 text-sm text-slate-500">
             {data?.summary.driver_to_passenger.count ?? 0} ratings
@@ -103,17 +101,16 @@ export default function AdminAnalyticsPage() {
             <article className="rounded-2xl bg-slate-50 p-4 text-sm" key={item.id}>
               <p className="font-black">Ride #{item.id}</p>
               <p className="mt-1 text-slate-600">
-                {item.passenger_name} rated {item.driver_name}: {item.passenger_rating ?? "—"}★
+                {item.passenger_name} rated {item.driver_name}: {item.passenger_rating ?? "ΓÇö"}Γÿà
               </p>
               {item.passenger_feedback ? <p className="mt-1 text-slate-500">{item.passenger_feedback}</p> : null}
               <p className="mt-2 text-slate-600">
-                Driver rated passenger: {item.driver_rating ?? "—"}★
+                Driver rated passenger: {item.driver_rating ?? "ΓÇö"}Γÿà
               </p>
             </article>
           ))}
         </div>
       </section>
     </AdminModuleShell>
-    </SuperAdminPageGuard>
   );
 }

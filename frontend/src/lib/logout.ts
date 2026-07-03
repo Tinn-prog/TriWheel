@@ -1,3 +1,4 @@
+import { loginPathForAdminRole } from "@/lib/adminRoles";
 import { apiFetch, apiRoutes } from "./api";
 import {
   clearAuthSession,
@@ -8,15 +9,16 @@ import {
 type StoredUser = {
   id: number;
   role: string;
+  admin_role?: string | null;
 };
 
-export function loginRedirectForRole(role?: string) {
+export function loginRedirectForRole(role?: string, adminRole?: string | null) {
   if (role === "driver") {
     return "/login?role=driver";
   }
 
   if (role === "admin") {
-    return "/login?role=admin";
+    return loginPathForAdminRole(adminRole);
   }
 
   return "/login?role=passenger";
@@ -51,5 +53,7 @@ export async function logoutTriWheel(redirectTo?: string) {
   clearAuthSession();
   window.dispatchEvent(new Event("triwheel_user_change"));
 
-  window.location.assign(redirectTo ?? loginRedirectForRole(user?.role));
+  window.location.assign(
+    redirectTo ?? loginRedirectForRole(user?.role, user?.admin_role),
+  );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { adminHomeForRole } from "@/lib/adminRoles";
 import { useStoredTriWheelSession } from "@/app/admin/AdminAccessGate";
 import { driverNavItems } from "@/app/driver/driverNav";
 import { passengerNavItems } from "@/app/passenger/passengerNav";
@@ -35,6 +36,7 @@ type StoredUser = {
   last_name?: string | null;
   email: string;
   role: string;
+  admin_role?: string | null;
   is_verified?: boolean;
   contact_number?: string | null;
   current_address?: string | null;
@@ -227,7 +229,7 @@ export default function SettingsPage() {
     }
 
     if (user?.role === "admin") {
-      return "/admin";
+      return adminHomeForRole(user.admin_role);
     }
 
     return "/passenger";

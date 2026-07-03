@@ -1,5 +1,6 @@
 "use client";
 
+import { type AdminPortal } from "@/lib/adminRoles";
 import { apiFetch, apiRoutes } from "@/lib/api";
 import {
   persistAuthSession,
@@ -32,9 +33,11 @@ type ValidationErrorResponse = {
 export function LoginForm({
   defaultEmail = "",
   defaultPassword = "",
+  portal,
 }: {
   defaultEmail?: string;
   defaultPassword?: string;
+  portal?: AdminPortal;
 }) {
   const [email, setEmail] = useState(defaultEmail);
   const [rememberMe, setRememberMe] = useState(true);
@@ -107,7 +110,12 @@ export function LoginForm({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password, remember }),
+        body: JSON.stringify({
+          email,
+          password,
+          remember,
+          ...(portal ? { portal } : {}),
+        }),
       });
 
       let data: LoginResponse | ValidationErrorResponse;

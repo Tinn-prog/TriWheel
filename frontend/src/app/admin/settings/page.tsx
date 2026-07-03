@@ -4,6 +4,7 @@ import { adminGet, adminPatch, apiRoutes, isSuperAdmin } from "@/lib/adminApi";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { adminInputClass } from "../AdminFilters";
+import { SuperAdminPageGuard } from "../SuperAdminPageGuard";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
 
 type FareRules = {
@@ -235,6 +236,7 @@ export default function AdminSettingsPage() {
   const canEdit = isSuperAdmin();
 
   return (
+    <SuperAdminPageGuard>
     <AdminModuleShell
       description="Central control for platform configuration, user access, fares, and compliance."
       title="Admin Settings"
@@ -376,7 +378,7 @@ export default function AdminSettingsPage() {
           </div>
           <Link
             className="inline-flex rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white"
-            href="/admin/users"
+            href="/superadmin/users"
           >
             Manage Users
           </Link>
@@ -638,5 +640,6 @@ export default function AdminSettingsPage() {
         )}
       </section>
     </AdminModuleShell>
+    </SuperAdminPageGuard>
   );
 }

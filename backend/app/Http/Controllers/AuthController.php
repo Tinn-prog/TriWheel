@@ -720,6 +720,7 @@ class AuthController extends Controller
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
             'remember' => ['sometimes', 'boolean'],
+            'portal' => ['sometimes', Rule::in(['admin', 'superadmin'])],
         ]);
 
         $user = User::query()
@@ -744,6 +745,22 @@ class AuthController extends Controller
             ]);
         }
 
+        if ($user->role === 'admin' && isset($credentials['portal'])) {
+            $isSuperAdmin = $user->admin_role === 'super_admin';
+
+            if ($credentials['portal'] === 'superadmin' && ! $isSuperAdmin) {
+                throw ValidationException::withMessages([
+                    'email' => ['This account does not have super admin access. Use the admin operator login instead.'],
+                ]);
+            }
+
+            if ($credentials['portal'] === 'admin' && $isSuperAdmin) {
+                throw ValidationException::withMessages([
+                    'email' => ['Super admin accounts must use the Super Admin login.'],
+                ]);
+            }
+        }
+
         $suspension = null;
 
         if ($user->is_suspended && $user->role === 'driver') {
@@ -755,7 +772,7 @@ class AuthController extends Controller
         $token = $user->createToken('triwheel-api', ['*'], $tokenExpiresAt)->plainTextToken;
 
         $redirectTo = match ($user->role) {
-            'admin' => '/admin',
+            'admin' => $user->admin_role === 'super_admin' ? '/superadmin' : '/admin',
             'driver' => '/driver',
             default => '/passenger',
         };

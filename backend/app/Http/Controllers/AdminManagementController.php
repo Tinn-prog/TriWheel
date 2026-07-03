@@ -153,7 +153,7 @@ class AdminManagementController extends Controller
 
     public function ratings(Request $request): JsonResponse
     {
-        $this->requireAdmin($request);
+        $this->requireSuperAdmin($request);
 
         $completed = Ride::query()->where('status', 'completed');
 
@@ -216,7 +216,7 @@ class AdminManagementController extends Controller
 
     public function settings(Request $request): JsonResponse
     {
-        $this->requireAdmin($request);
+        $this->requireSuperAdmin($request);
 
         return response()->json([
             'fare_rules' => PlatformSetting::fareRules(),
@@ -335,7 +335,7 @@ class AdminManagementController extends Controller
 
     public function auditLogs(Request $request): JsonResponse
     {
-        $this->requireAdmin($request);
+        $this->requireSuperAdmin($request);
 
         $logs = AdminAuditLog::query()
             ->with('admin:id,name,email,admin_role')
@@ -443,7 +443,7 @@ class AdminManagementController extends Controller
 
     public function exportUsers(Request $request): StreamedResponse
     {
-        $this->requireAdmin($request);
+        $this->requireSuperAdmin($request);
 
         return $this->streamCsv('users.csv', [
             'ID', 'Name', 'Email', 'Role', 'Admin Role', 'Contact', 'Verified', 'Suspended', 'Rides', 'Joined',
@@ -468,7 +468,7 @@ class AdminManagementController extends Controller
 
     public function exportDrivers(Request $request): StreamedResponse
     {
-        $this->requireAdmin($request);
+        $this->requireSuperAdmin($request);
 
         return $this->streamCsv('drivers.csv', [
             'ID', 'Name', 'Email', 'Approval', 'Online Status', 'License', 'LGU', 'MTOP', 'Service Zone', 'Vehicle', 'Plate', 'Applied',
@@ -494,7 +494,7 @@ class AdminManagementController extends Controller
 
     public function exportRides(Request $request): StreamedResponse
     {
-        $this->requireAdmin($request);
+        $this->requireSuperAdmin($request);
 
         return $this->streamCsv('rides.csv', [
             'ID', 'Passenger', 'Driver', 'Pickup', 'Dropoff', 'Status', 'Emergency', 'Fare', 'Created',

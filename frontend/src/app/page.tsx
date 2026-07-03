@@ -295,6 +295,12 @@ export default function Home() {
               <Link className="hover:text-orange-300" href="/login?role=driver">
                 Driver Login
               </Link>
+              <Link className="hover:text-orange-300" href="/login?role=admin">
+                Admin Operator Login
+              </Link>
+              <Link className="hover:text-orange-300" href="/login?role=superadmin">
+                Super Admin Login
+              </Link>
               <a
                 className="hover:text-orange-300"
                 href="https://www.facebook.com/profile.php?id=61586455232006"
