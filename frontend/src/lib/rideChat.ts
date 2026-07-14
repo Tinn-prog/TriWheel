@@ -1,3 +1,5 @@
+import { formatDateTime } from "@/lib/formatDateTime";
+
 export type RideChatMeta = {
   open: boolean;
   opens_at: string | null;
@@ -33,23 +35,9 @@ export function formatChatExpiry(expiresAt: string | null) {
     return null;
   }
 
-  return new Date(expiresAt).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTime(expiresAt);
 }
 
 export function formatConversationTime(value: string | null) {
-  if (!value) {
-    return "";
-  }
-
-  return new Date(value).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTime(value);
 }

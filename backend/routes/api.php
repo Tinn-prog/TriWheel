@@ -76,8 +76,11 @@ Route::patch('/admin/settings', [AdminManagementController::class, 'updateSettin
 Route::get('/admin/audit-logs', [AdminManagementController::class, 'auditLogs']);
 Route::get('/admin/reports', [AdminManagementController::class, 'reports']);
 Route::patch('/admin/reports/{report}', [AdminManagementController::class, 'updateReport']);
+Route::get('/admin/users/trashed', [AdminManagementController::class, 'trashedUsers']);
 Route::patch('/admin/users/{user}', [AdminManagementController::class, 'updateUser']);
 Route::patch('/admin/users/{user}/suspend', [AdminManagementController::class, 'suspendUser']);
+Route::delete('/admin/users/{user}', [AdminManagementController::class, 'softDeleteUser']);
+Route::post('/admin/users/{userId}/restore', [AdminManagementController::class, 'restoreUser']);
 Route::get('/admin/export/users', [AdminManagementController::class, 'exportUsers']);
 Route::get('/admin/export/drivers', [AdminManagementController::class, 'exportDrivers']);
 Route::get('/admin/export/rides', [AdminManagementController::class, 'exportRides']);

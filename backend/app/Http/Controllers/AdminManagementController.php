@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Console\Commands\PurgeExpiredDeletedUsers;
 use App\Http\Controllers\Concerns\ResolvesAdminUser;
 use App\Models\AdminAuditLog;
 use App\Models\Driver;
@@ -10,10 +11,12 @@ use App\Models\Ride;
 use App\Models\RideReport;
 use App\Models\User;
 use App\Services\AdminAuditService;
+use App\Services\AdminDocumentExportService;
 use App\Support\RideReportReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -23,7 +26,10 @@ class AdminManagementController extends Controller
 {
     use ResolvesAdminUser;
 
-    public function __construct(private readonly AdminAuditService $audit) {}
+    public function __construct(
+        private readonly AdminAuditService $audit,
+        private readonly AdminDocumentExportService $documentExports,
+    ) {}
 
     public function showRide(Request $request, Ride $ride): JsonResponse
     {
@@ -346,7 +352,7 @@ class AdminManagementController extends Controller
         return response()->json(['logs' => $logs]);
     }
 
-    public function exportAuditLogs(Request $request): StreamedResponse
+    public function exportAuditLogs(Request $request): Response|StreamedResponse
     {
         $this->requireSuperAdmin($request);
 
@@ -354,23 +360,30 @@ class AdminManagementController extends Controller
             ->limit(5000)
             ->get();
 
-        return $this->streamCsv('audit-logs.csv', [
-            'ID', 'When', 'Admin', 'Admin Email', 'Admin Role', 'Action', 'Target Type', 'Target ID', 'Details',
-        ], $logs->map(function (AdminAuditLog $log): array {
-            $details = $log->details ? json_decode($log->details, true) : null;
+        return $this->documentExports->download(
+            $this->exportFormat($request),
+            'audit-logs',
+            'TriWheel — Audit Log Export',
+            [
+                'ID', 'When', 'Admin', 'Admin Email', 'Admin Role', 'Action', 'Target Type', 'Target ID', 'Details',
+            ],
+            $logs->map(function (AdminAuditLog $log): array {
+                $details = $log->details ? json_decode($log->details, true) : null;
 
-            return [
-                $log->id,
-                $log->created_at?->toDateTimeString() ?? '',
-                $log->admin?->name ?? '',
-                $log->admin?->email ?? '',
-                $log->admin?->admin_role ?? '',
-                $log->action,
-                $log->target_type,
-                $log->target_id,
-                $details ? json_encode($details) : '',
-            ];
-        }));
+                return [
+                    $log->id,
+                    $log->created_at?->timezone(config('app.timezone'))->format('M j, Y, g:i A') ?? '',
+                    $log->admin?->name ?? '',
+                    $log->admin?->email ?? '',
+                    $log->admin?->admin_role ?? '',
+                    $log->action,
+                    $log->target_type,
+                    $log->target_id,
+                    $details ? json_encode($details) : '',
+                ];
+            }),
+            'Admin action history',
+        );
     }
 
     public function storeAdminUser(Request $request): JsonResponse
@@ -628,79 +641,234 @@ class AdminManagementController extends Controller
         ]);
     }
 
-    public function exportUsers(Request $request): StreamedResponse
+    public function softDeleteUser(Request $request, User $user): JsonResponse
+    {
+        $admin = $this->requireSuperAdmin($request);
+
+        if ($user->id === $admin->id) {
+            return response()->json([
+                'message' => 'You cannot delete your own account.',
+            ], 422);
+        }
+
+        if ($user->admin_role === 'super_admin') {
+            $remainingSuperAdmins = User::query()
+                ->where('role', 'admin')
+                ->where('admin_role', 'super_admin')
+                ->where('id', '!=', $user->id)
+                ->count();
+
+            if ($remainingSuperAdmins < 1) {
+                return response()->json([
+                    'message' => 'At least one super admin account must remain active.',
+                ], 422);
+            }
+        }
+
+        $data = $request->validate([
+            'deletion_reason' => ['required', 'string', 'max:255'],
+        ]);
+
+        $user->forceFill([
+            'deleted_by' => $admin->id,
+            'deletion_reason' => trim((string) $data['deletion_reason']),
+            'is_suspended' => true,
+            'suspension_reason' => $user->suspension_reason ?: 'Account deleted (stored for Super Admin)',
+        ])->save();
+
+        $user->tokens()->delete();
+
+        if ($user->driver) {
+            $user->driver->update(['status' => 'offline']);
+        }
+
+        $user->delete();
+
+        $stored = User::onlyTrashed()->with(['deletedByAdmin:id,name,email'])->find($user->id);
+
+        $this->audit->log($admin, 'user.soft_deleted', 'user', $user->id, [
+            'email' => $user->email,
+            'role' => $user->role,
+            'reason' => $data['deletion_reason'],
+        ]);
+
+        return response()->json([
+            'message' => 'Account deleted and stored for 3 months. Super Admin can restore it from Deleted Accounts before permanent purge.',
+            'user' => $this->formatAdminUser($stored ?? $user),
+        ]);
+    }
+
+    public function trashedUsers(Request $request): JsonResponse
     {
         $this->requireSuperAdmin($request);
 
-        return $this->streamCsv('users.csv', [
-            'ID', 'Name', 'Email', 'Role', 'Admin Role', 'Contact', 'Verified', 'Suspended', 'Rides', 'Joined',
-        ], User::query()
-            ->select(['id', 'name', 'email', 'role', 'admin_role', 'contact_number', 'is_verified', 'is_suspended', 'created_at'])
+        $data = $request->validate([
+            'search' => ['sometimes', 'string', 'max:100'],
+            'role' => ['sometimes', Rule::in(['admin', 'driver', 'passenger'])],
+            'admin_role' => ['sometimes', Rule::in(['operator', 'super_admin'])],
+            'retention' => ['sometimes', Rule::in(['expiring_soon', 'due'])],
+        ]);
+
+        $users = User::onlyTrashed()
+            ->whereNull('permanently_purged_at')
+            ->with(['deletedByAdmin:id,name,email'])
             ->withCount('rides')
-            ->latest()
+            ->when(filled($data['role'] ?? null), fn ($query) => $query->where('role', $data['role']))
+            ->when(filled($data['admin_role'] ?? null), function ($query) use ($data): void {
+                $query->where('role', 'admin')->where('admin_role', $data['admin_role']);
+            })
+            ->when(($data['retention'] ?? null) === 'due', function ($query): void {
+                $query->where(
+                    'deleted_at',
+                    '<=',
+                    now()->subMonths(PurgeExpiredDeletedUsers::RETENTION_MONTHS),
+                );
+            })
+            ->when(($data['retention'] ?? null) === 'expiring_soon', function ($query): void {
+                $cutoff = now()->subMonths(PurgeExpiredDeletedUsers::RETENTION_MONTHS);
+
+                // Purge date falls within the next 7 days (not yet overdue).
+                $query->where('deleted_at', '>', $cutoff)
+                    ->where('deleted_at', '<=', $cutoff->copy()->addDays(7));
+            })
+            ->when(filled($data['search'] ?? null), function ($query) use ($data): void {
+                $term = '%'.$data['search'].'%';
+
+                $query->where(function ($inner) use ($term): void {
+                    $inner->where('name', 'like', $term)
+                        ->orWhere('email', 'like', $term)
+                        ->orWhere('contact_number', 'like', $term)
+                        ->orWhere('deletion_reason', 'like', $term);
+                });
+            })
+            ->orderByDesc('deleted_at')
             ->get()
-            ->map(fn (User $user): array => [
-                $user->id,
-                $user->name,
-                $user->email,
-                $user->role,
-                $user->admin_role ?? '',
-                $user->contact_number ?? '',
-                $user->is_verified ? 'yes' : 'no',
-                $user->is_suspended ? 'yes' : 'no',
-                (string) ($user->rides_count ?? 0),
-                $user->created_at?->toDateTimeString() ?? '',
-            ]));
+            ->map(fn (User $user): array => $this->formatAdminUser($user));
+
+        return response()->json(['users' => $users]);
     }
 
-    public function exportDrivers(Request $request): StreamedResponse
+    public function restoreUser(Request $request, int $userId): JsonResponse
+    {
+        $admin = $this->requireSuperAdmin($request);
+
+        $user = User::onlyTrashed()
+            ->whereNull('permanently_purged_at')
+            ->findOrFail($userId);
+
+        $user->restore();
+        $user->forceFill([
+            'deleted_by' => null,
+            'deletion_reason' => null,
+            'is_suspended' => false,
+            'suspension_reason' => null,
+        ])->save();
+
+        $this->audit->log($admin, 'user.restored', 'user', $user->id, [
+            'email' => $user->email,
+            'role' => $user->role,
+        ]);
+
+        return response()->json([
+            'message' => 'Account restored successfully.',
+            'user' => $this->formatAdminUser($user->refresh()),
+        ]);
+    }
+
+    public function exportUsers(Request $request): Response|StreamedResponse
     {
         $this->requireSuperAdmin($request);
 
-        return $this->streamCsv('drivers.csv', [
-            'ID', 'Name', 'Email', 'Approval', 'Online Status', 'License', 'LGU', 'MTOP', 'Service Zone', 'Vehicle', 'Plate', 'Applied',
-        ], Driver::query()
-            ->with(['user:id,name,email', 'vehicle:id,driver_id,vehicle_type,plate_number'])
-            ->latest()
-            ->get()
-            ->map(fn (Driver $driver): array => [
-                $driver->id,
-                $driver->user?->name ?? '',
-                $driver->user?->email ?? '',
-                $driver->approval_status,
-                $driver->status,
-                $driver->license_number ?? '',
-                $driver->lgu ?? '',
-                $driver->mtop_number ?? '',
-                $driver->service_zone_id ?? '',
-                $driver->vehicle?->vehicle_type ?? '',
-                $driver->vehicle?->plate_number ?? '',
-                $driver->submitted_at?->toDateTimeString() ?? '',
-            ]));
+        return $this->documentExports->download(
+            $this->exportFormat($request),
+            'users',
+            'TriWheel — Users Export',
+            [
+                'ID', 'Name', 'Email', 'Role', 'Admin Role', 'Contact', 'Verified', 'Suspended', 'Rides', 'Joined',
+            ],
+            User::query()
+                ->select(['id', 'name', 'email', 'role', 'admin_role', 'contact_number', 'is_verified', 'is_suspended', 'created_at'])
+                ->withCount('rides')
+                ->latest()
+                ->get()
+                ->map(fn (User $user): array => [
+                    $user->id,
+                    $user->name,
+                    $user->email,
+                    $user->role,
+                    $user->admin_role ?? '',
+                    $user->contact_number ?? '',
+                    $user->is_verified ? 'yes' : 'no',
+                    $user->is_suspended ? 'yes' : 'no',
+                    (string) ($user->rides_count ?? 0),
+                    $user->created_at?->timezone(config('app.timezone'))->format('M j, Y, g:i A') ?? '',
+                ]),
+            'All platform user accounts',
+        );
     }
 
-    public function exportRides(Request $request): StreamedResponse
+    public function exportDrivers(Request $request): Response|StreamedResponse
     {
         $this->requireSuperAdmin($request);
 
-        return $this->streamCsv('rides.csv', [
-            'ID', 'Passenger', 'Driver', 'Pickup', 'Dropoff', 'Status', 'Emergency', 'Fare', 'Created',
-        ], Ride::query()
-            ->with(['passenger:id,name', 'driver.user:id,name'])
-            ->latest()
-            ->limit(5000)
-            ->get()
-            ->map(fn (Ride $ride): array => [
-                $ride->id,
-                $ride->passenger?->name ?? '',
-                $ride->driver?->user?->name ?? '',
-                $ride->pickup_address,
-                $ride->dropoff_address,
-                $ride->status,
-                $ride->is_emergency ? 'yes' : 'no',
-                $ride->fare !== null ? (string) $ride->fare : '',
-                $ride->created_at?->toDateTimeString() ?? '',
-            ]));
+        return $this->documentExports->download(
+            $this->exportFormat($request),
+            'drivers',
+            'TriWheel — Drivers Export',
+            [
+                'ID', 'Name', 'Email', 'Approval', 'Online Status', 'License', 'LGU', 'MTOP', 'Service Zone', 'Vehicle', 'Plate', 'Applied',
+            ],
+            Driver::query()
+                ->with(['user:id,name,email', 'vehicle:id,driver_id,vehicle_type,plate_number'])
+                ->latest()
+                ->get()
+                ->map(fn (Driver $driver): array => [
+                    $driver->id,
+                    $driver->user?->name ?? '',
+                    $driver->user?->email ?? '',
+                    $driver->approval_status,
+                    $driver->status,
+                    $driver->license_number ?? '',
+                    $driver->lgu ?? '',
+                    $driver->mtop_number ?? '',
+                    $driver->service_zone_id ?? '',
+                    $driver->vehicle?->vehicle_type ?? '',
+                    $driver->vehicle?->plate_number ?? '',
+                    $driver->submitted_at?->timezone(config('app.timezone'))->format('M j, Y, g:i A') ?? '',
+                ]),
+            'Driver applications and vehicle details',
+        );
+    }
+
+    public function exportRides(Request $request): Response|StreamedResponse
+    {
+        $this->requireSuperAdmin($request);
+
+        return $this->documentExports->download(
+            $this->exportFormat($request),
+            'rides',
+            'TriWheel — Rides Export',
+            [
+                'ID', 'Passenger', 'Driver', 'Pickup', 'Dropoff', 'Status', 'Emergency', 'Fare', 'Created',
+            ],
+            Ride::query()
+                ->with(['passenger:id,name', 'driver.user:id,name'])
+                ->latest()
+                ->limit(5000)
+                ->get()
+                ->map(fn (Ride $ride): array => [
+                    $ride->id,
+                    $ride->passenger?->name ?? '',
+                    $ride->driver?->user?->name ?? '',
+                    $ride->pickup_address,
+                    $ride->dropoff_address,
+                    $ride->status,
+                    $ride->is_emergency ? 'yes' : 'no',
+                    $ride->fare !== null ? (string) $ride->fare : '',
+                    $ride->created_at?->timezone(config('app.timezone'))->format('M j, Y, g:i A') ?? '',
+                ]),
+            'Ride history and trip records',
+        );
     }
 
     public function approvedDrivers(Request $request): JsonResponse
@@ -721,20 +889,13 @@ class AdminManagementController extends Controller
         return response()->json(['drivers' => $drivers]);
     }
 
-    private function streamCsv(string $filename, array $headers, $rows): StreamedResponse
+    private function exportFormat(Request $request): string
     {
-        return response()->streamDownload(function () use ($headers, $rows): void {
-            $handle = fopen('php://output', 'w');
-            fputcsv($handle, $headers);
-
-            foreach ($rows as $row) {
-                fputcsv($handle, $row);
-            }
-
-            fclose($handle);
-        }, $filename, [
-            'Content-Type' => 'text/csv',
+        $data = $request->validate([
+            'format' => ['sometimes', 'string', Rule::in(['csv', 'pdf', 'docx', 'doc', 'word'])],
         ]);
+
+        return strtolower((string) ($data['format'] ?? 'csv'));
     }
 
     /**
@@ -785,6 +946,10 @@ class AdminManagementController extends Controller
 
     private function formatAdminUser(User $user): array
     {
+        $purgeAt = $user->deleted_at
+            ? $user->deleted_at->copy()->addMonths(PurgeExpiredDeletedUsers::RETENTION_MONTHS)
+            : null;
+
         return [
             'id' => $user->id,
             'name' => $user->name,
@@ -796,8 +961,15 @@ class AdminManagementController extends Controller
             'is_suspended' => (bool) $user->is_suspended,
             'suspension_reason' => $user->suspension_reason,
             'verification_rejection_reason' => $user->verification_rejection_reason,
-            'rides_count' => (int) $user->rides()->count(),
+            'rides_count' => (int) ($user->rides_count ?? $user->rides()->count()),
             'created_at' => $user->created_at,
+            'deleted_at' => $user->deleted_at,
+            'deletion_reason' => $user->deletion_reason,
+            'deleted_by' => $user->deleted_by,
+            'deleted_by_name' => $user->deletedByAdmin?->name,
+            'permanently_purged_at' => $user->permanently_purged_at,
+            'purge_at' => $purgeAt,
+            'retention_months' => PurgeExpiredDeletedUsers::RETENTION_MONTHS,
         ];
     }
 

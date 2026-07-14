@@ -1,6 +1,7 @@
 "use client";
 
 import { adminGet, apiRoutes } from "@/lib/adminApi";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { useLiveDashboardRefresh } from "@/hooks/useLiveDashboardRefresh";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminFilterBar, AdminFilterField, adminInputClass } from "../AdminFilters";
@@ -149,7 +150,7 @@ export default function AdminLiveMapPage() {
             Counts approved drivers marked online with a GPS ping in the last{" "}
             {liveGpsFreshMinutes} minutes
             {lastUpdatedAt
-              ? ` · updated ${lastUpdatedAt.toLocaleTimeString()}`
+              ? ` · updated ${formatDateTime(lastUpdatedAt)}`
               : ""}
           </p>
         </div>

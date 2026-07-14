@@ -1,3 +1,5 @@
+import { formatDateTime } from "@/lib/formatDateTime";
+
 export type ProfileSnapshot = {
   firstName: string;
   middleName: string;
@@ -126,7 +128,7 @@ export function formatProfileChangeDescription(
 }
 
 export function formatProfileLimitSummary(limit: ProfileChangeLimit) {
-  const resetDate = new Date(limit.resets_at).toLocaleDateString(undefined, {
+  const resetDate = formatDateTime(limit.resets_at, {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -143,7 +145,7 @@ export type PasswordChangeLimit = {
 };
 
 export function formatPasswordLimitSummary(limit: PasswordChangeLimit) {
-  const resetDate = new Date(limit.resets_at).toLocaleDateString(undefined, {
+  const resetDate = formatDateTime(limit.resets_at, {
     month: "long",
     day: "numeric",
     year: "numeric",

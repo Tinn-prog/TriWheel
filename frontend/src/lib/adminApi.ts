@@ -103,7 +103,7 @@ export async function adminPatch(path: string, body: Record<string, unknown>) {
   });
 }
 
-export async function adminPost(path: string, body: Record<string, unknown>) {
+export async function adminPost(path: string, body: Record<string, unknown> = {}) {
   const userId = getAdminUserId();
 
   if (!userId && !readStoredToken()) {
@@ -112,6 +112,26 @@ export async function adminPost(path: string, body: Record<string, unknown>) {
 
   return apiFetch(buildAdminUrl(path), {
     method: "POST",
+    headers: {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...(userId ? { user_id: userId } : {}),
+      ...body,
+    }),
+  });
+}
+
+export async function adminDelete(path: string, body: Record<string, unknown> = {}) {
+  const userId = getAdminUserId();
+
+  if (!userId && !readStoredToken()) {
+    throw new Error("Admin session required.");
+  }
+
+  return apiFetch(buildAdminUrl(path), {
+    method: "DELETE",
     headers: {
       ...getAuthHeaders(),
       "Content-Type": "application/json",

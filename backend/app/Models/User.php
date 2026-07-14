@@ -4,16 +4,18 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, \Illuminate\Notifications\Notifiable;
+    use HasApiTokens, HasFactory, SoftDeletes, \Illuminate\Notifications\Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -50,6 +52,9 @@ class User extends Authenticatable
         'verification_rejection_reason',
         'admin_role',
         'password',
+        'deleted_by',
+        'deletion_reason',
+        'permanently_purged_at',
     ];
 
     /**
@@ -84,6 +89,8 @@ class User extends Authenticatable
             'submitted_at' => 'datetime',
             'password' => 'hashed',
             'reset_expiry' => 'datetime',
+            'deleted_at' => 'datetime',
+            'permanently_purged_at' => 'datetime',
         ];
     }
 
@@ -95,6 +102,11 @@ class User extends Authenticatable
     public function rides(): HasMany
     {
         return $this->hasMany(Ride::class, 'passenger_id');
+    }
+
+    public function deletedByAdmin(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'deleted_by');
     }
 
     protected static function booted(): void

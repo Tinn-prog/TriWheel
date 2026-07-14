@@ -1,6 +1,7 @@
 "use client";
 
 import { adminGet, adminPatch, apiRoutes } from "@/lib/adminApi";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { useCallback, useEffect, useState } from "react";
 import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
@@ -204,7 +205,7 @@ export default function AdminPassengersPage() {
             <div className="mt-5 grid gap-3 text-sm">
               <p><span className="font-bold text-slate-500">Contact:</span> {passenger.contact_number ?? "N/A"}</p>
               <p><span className="font-bold text-slate-500">Ride Count:</span> {passenger.rides_count}</p>
-              <p><span className="font-bold text-slate-500">Joined:</span> {new Date(passenger.submitted_at ?? passenger.created_at).toLocaleDateString()}</p>
+              <p><span className="font-bold text-slate-500">Joined:</span> {formatDateTime(passenger.submitted_at ?? passenger.created_at)}</p>
             </div>
 
             <div className="mt-5 rounded-3xl bg-slate-50 p-4">

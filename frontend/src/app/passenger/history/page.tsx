@@ -14,6 +14,7 @@ import {
   dismissRatingRide,
   readDismissedRatingRideIds,
 } from "@/lib/rideFeedbackDismiss";
+import { formatDateTime } from "@/lib/formatDateTime";
 import {
   passengerReportReasons,
   type PassengerReportReasonCode,
@@ -83,12 +84,7 @@ function formatFare(fare: number | null) {
 }
 
 function formatRideDate(value: string) {
-  return new Date(value).toLocaleString(undefined, {
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTime(value);
 }
 
 function formatVehicleSummary(ride: Ride) {

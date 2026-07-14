@@ -25,11 +25,11 @@ class RideReport extends Model
 
     public function reporter(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'reporter_user_id');
+        return $this->belongsTo(User::class, 'reporter_user_id')->withTrashed();
     }
 
     public function reportedUser(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'reported_user_id');
+        return $this->belongsTo(User::class, 'reported_user_id')->withTrashed();
     }
 }

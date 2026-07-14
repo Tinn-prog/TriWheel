@@ -1,15 +1,12 @@
 "use client";
 
 import { apiRoutes } from "@/lib/api";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { FormEvent, useEffect, useState } from "react";
 import type { DriverSuspensionState } from "./driverTypes";
 
 function formatDeadline(deadline: string | null) {
-  if (!deadline) {
-    return "";
-  }
-
-  return new Date(deadline).toLocaleString();
+  return formatDateTime(deadline);
 }
 
 function useCountdown(deadline: string | null, active: boolean) {

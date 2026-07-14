@@ -1,6 +1,7 @@
 "use client";
 
 import { apiFetch, apiRoutes, toApiUrl } from "@/lib/api";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { resolveNotificationHref } from "@/lib/notificationNavigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -233,7 +234,7 @@ export function NotificationBell({
                     {notification.body}
                   </p>
                   <p className="mt-2 text-[10px] font-semibold text-slate-400">
-                    {new Date(notification.created_at).toLocaleString()}
+                    {formatDateTime(notification.created_at)}
                   </p>
                 </button>
               ))

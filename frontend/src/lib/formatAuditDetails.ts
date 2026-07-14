@@ -85,6 +85,18 @@ export function formatAuditDetailLines(
     });
   }
 
+  if (action === "user.soft_deleted" || action === "user.restored" || action === "user.purged") {
+    lines.push({
+      label: "Account",
+      value:
+        action === "user.soft_deleted"
+          ? "Deleted (stored 3 months)"
+          : action === "user.restored"
+            ? "Restored"
+            : "Permanently purged",
+    });
+  }
+
   for (const [key, value] of Object.entries(details)) {
     if (consumed.has(key)) {
       continue;

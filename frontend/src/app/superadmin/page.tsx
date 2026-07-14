@@ -50,6 +50,12 @@ export default function SuperAdminOverviewPage() {
       detail: "Manage roles, admin access, and suspensions",
     },
     {
+      href: "/superadmin/deleted-accounts",
+      label: "Deleted Accounts",
+      value: "Stored",
+      detail: "Restore within 3 months, or accounts are permanently purged",
+    },
+    {
       href: "/superadmin/settings",
       label: "Platform Settings",
       value: "Config",

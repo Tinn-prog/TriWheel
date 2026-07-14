@@ -2,6 +2,7 @@
 
 import { adminGet, adminPatch, apiRoutes } from "@/lib/adminApi";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { useLiveDashboardRefresh } from "@/hooks/useLiveDashboardRefresh";
 import { useCallback, useEffect, useState } from "react";
 import { AdminRejectDialog } from "../AdminRejectDialog";
@@ -415,7 +416,7 @@ export default function AdminDriversPage() {
               </p>
               <p>
                 <span className="font-bold text-slate-500">Applied:</span>{" "}
-                {new Date(driver.submitted_at ?? driver.created_at).toLocaleDateString()}
+                {formatDateTime(driver.submitted_at ?? driver.created_at)}
               </p>
             </div>
 
@@ -466,7 +467,7 @@ export default function AdminDriversPage() {
               <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-950">
                 <p className="font-black">Appeal submitted</p>
                 <p className="mt-1 text-xs text-orange-800">
-                  {new Date(driver.suspension_appeal_submitted_at).toLocaleString()}
+                  {formatDateTime(driver.suspension_appeal_submitted_at)}
                 </p>
                 {driver.suspension_appeal_message ? (
                   <p className="mt-3 leading-6">{driver.suspension_appeal_message}</p>

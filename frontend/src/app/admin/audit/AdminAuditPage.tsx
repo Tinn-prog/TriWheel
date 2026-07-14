@@ -2,6 +2,7 @@
 
 import { adminDownload, adminGet, apiRoutes } from "@/lib/adminApi";
 import { formatAuditAction, formatAuditDetailLines } from "@/lib/formatAuditDetails";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { useCallback, useEffect, useState } from "react";
 import { AdminExportButton, AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell } from "../AdminModuleShell";
@@ -31,6 +32,9 @@ const auditActions = [
   "user.updated",
   "user.suspended",
   "user.unsuspended",
+  "user.soft_deleted",
+  "user.restored",
+  "user.purged",
   "ride.cancelled",
   "ride.reassigned",
   "ride_report.updated",
@@ -84,29 +88,76 @@ export default function AdminAuditPage() {
 
       <section className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm font-semibold text-slate-600">
-          Export respects the filters below.
+          Export respects the filters below. PDF and Word include the TriWheel logo and title.
         </p>
-        <AdminExportButton
-          filename="audit-logs.csv"
-          label="Export Audit Log"
-          onExport={async () => {
-            setError("");
-            setNotice("");
+        <div className="flex flex-wrap gap-2">
+          <AdminExportButton
+            filename="audit-logs.csv"
+            label="CSV"
+            onExport={async () => {
+              setError("");
+              setNotice("");
 
-            try {
-              await adminDownload(apiRoutes.adminExportAuditLogs, "audit-logs.csv", {
-                search: debouncedSearch || undefined,
-                action: actionFilter || undefined,
-                target_type: targetTypeFilter || undefined,
-              });
-              setNotice("Audit log exported.");
-            } catch (caughtError) {
-              setError(
-                caughtError instanceof Error ? caughtError.message : "Unable to export audit log.",
-              );
-            }
-          }}
-        />
+              try {
+                await adminDownload(apiRoutes.adminExportAuditLogs, "audit-logs.csv", {
+                  format: "csv",
+                  search: debouncedSearch || undefined,
+                  action: actionFilter || undefined,
+                  target_type: targetTypeFilter || undefined,
+                });
+                setNotice("Audit log exported as CSV.");
+              } catch (caughtError) {
+                setError(
+                  caughtError instanceof Error ? caughtError.message : "Unable to export audit log.",
+                );
+              }
+            }}
+          />
+          <AdminExportButton
+            filename="audit-logs.pdf"
+            label="PDF"
+            onExport={async () => {
+              setError("");
+              setNotice("");
+
+              try {
+                await adminDownload(apiRoutes.adminExportAuditLogs, "audit-logs.pdf", {
+                  format: "pdf",
+                  search: debouncedSearch || undefined,
+                  action: actionFilter || undefined,
+                  target_type: targetTypeFilter || undefined,
+                });
+                setNotice("Audit log exported as PDF.");
+              } catch (caughtError) {
+                setError(
+                  caughtError instanceof Error ? caughtError.message : "Unable to export audit log.",
+                );
+              }
+            }}
+          />
+          <AdminExportButton
+            filename="audit-logs.doc"
+            label="Word"
+            onExport={async () => {
+              setError("");
+              setNotice("");
+
+              try {
+                await adminDownload(apiRoutes.adminExportAuditLogs, "audit-logs.doc", {
+                  format: "docx",
+                  search: debouncedSearch || undefined,
+                  action: actionFilter || undefined,
+                  target_type: targetTypeFilter || undefined,
+                });
+                setNotice("Audit log exported as Word.");
+              } catch (caughtError) {
+                setError(
+                  caughtError instanceof Error ? caughtError.message : "Unable to export audit log.",
+                );
+              }
+            }}
+          />
+        </div>
       </section>
 
       <AdminFilterBar>
@@ -165,7 +216,7 @@ export default function AdminAuditPage() {
                 logs.map((log) => (
                   <tr key={log.id}>
                     <td className="px-5 py-4 text-slate-500">
-                      {new Date(log.created_at).toLocaleString()}
+                      {formatDateTime(log.created_at)}
                     </td>
                     <td className="px-5 py-4">
                       <div className="font-black">{log.admin_name}</div>

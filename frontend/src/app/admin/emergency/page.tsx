@@ -1,6 +1,7 @@
 "use client";
 
 import { adminGet, adminPatch, apiRoutes } from "@/lib/adminApi";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
@@ -165,7 +166,7 @@ export default function AdminEmergencyPage() {
               <p><span className="font-bold text-slate-500">Pickup:</span> {ride.pickup_address}</p>
               <p><span className="font-bold text-slate-500">Dropoff:</span> {ride.dropoff_address}</p>
               <p><span className="font-bold text-slate-500">Driver:</span> {ride.driver_name ?? "Unassigned"}</p>
-              <p><span className="font-bold text-slate-500">Requested:</span> {new Date(ride.created_at).toLocaleString()}</p>
+              <p><span className="font-bold text-slate-500">Requested:</span> {formatDateTime(ride.created_at)}</p>
             </div>
             {!["completed", "cancelled"].includes(ride.status) ? (
               <button

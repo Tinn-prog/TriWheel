@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useLiveDashboardRefresh } from "@/hooks/useLiveDashboardRefresh";
 import { adminGet, apiRoutes } from "@/lib/adminApi";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { useStoredTriWheelSession } from "./AdminAccessGate";
 import { statusClass } from "./adminUi";
 
@@ -230,7 +231,7 @@ export function AdminDashboard() {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
           <p className="text-xs font-semibold text-slate-500">
             {lastLiveRefreshAt
-              ? `Updated ${lastLiveRefreshAt.toLocaleTimeString()} · refreshes every 5 seconds`
+              ? `Updated ${formatDateTime(lastLiveRefreshAt)} · refreshes every 5 seconds`
               : "Refreshing live driver count..."}
           </p>
           <Link
@@ -364,7 +365,7 @@ export function AdminDashboard() {
                     {user.contact_number ?? "-"}
                   </td>
                   <td className="py-4 text-slate-500">
-                    {new Date(user.created_at).toLocaleDateString()}
+                    {formatDateTime(user.created_at)}
                   </td>
                 </tr>
               ))}

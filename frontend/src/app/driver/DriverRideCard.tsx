@@ -2,6 +2,7 @@
 
 import { RideRatingFeedback } from "@/components/RideStarRating";
 import { TriWheelLoadingScreen } from "@/components/TriWheelLoadingScreen";
+import { formatDateTime } from "@/lib/formatDateTime";
 import {
   buildNavigationUrl,
   getDriverNavigationTarget,
@@ -84,7 +85,7 @@ export function DriverRideCard({
           </div>
           {!compact ? (
             <div className="mt-1 text-sm text-slate-500">
-              {new Date(ride.created_at).toLocaleString()}
+              {formatDateTime(ride.created_at)}
             </div>
           ) : null}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { adminPatch, adminGet, apiRoutes } from "@/lib/adminApi";
+import { formatDateTime } from "@/lib/formatDateTime";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
@@ -483,7 +484,7 @@ export default function AdminReportsPage() {
                             {report.report_reason}
                           </p>
                           <p className="mt-1 text-xs text-slate-400">
-                            {new Date(report.created_at).toLocaleString()}
+                            {formatDateTime(report.created_at)}
                           </p>
                           {report.admin_notes ? (
                             <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">

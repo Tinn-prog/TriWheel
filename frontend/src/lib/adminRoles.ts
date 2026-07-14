@@ -20,6 +20,7 @@ export const superAdminNavItems = [
   { href: "/superadmin/rides", label: "Rides" },
   { href: "/superadmin/reports", label: "Reports" },
   { href: "/superadmin/users", label: "User Accounts" },
+  { href: "/superadmin/deleted-accounts", label: "Deleted Accounts" },
   { href: "/superadmin/settings", label: "Platform Settings" },
   { href: "/superadmin/audit", label: "Audit Log" },
   { href: "/superadmin/analytics", label: "Analytics & Exports" },

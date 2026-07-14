@@ -60,7 +60,7 @@ class Ride extends Model
 
     public function passenger(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'passenger_id');
+        return $this->belongsTo(User::class, 'passenger_id')->withTrashed();
     }
 
     public function driver(): BelongsTo

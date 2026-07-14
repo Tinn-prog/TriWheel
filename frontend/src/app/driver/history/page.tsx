@@ -9,6 +9,7 @@ import { useRideReport } from "@/hooks/useRideReport";
 import { apiRoutes } from "@/lib/api";
 import { logoutTriWheel } from "@/lib/logout";
 import { rideRatingVariant } from "@/lib/rideRatingCopy";
+import { formatDateTime } from "@/lib/formatDateTime";
 import {
   driverReportReasons,
   type DriverReportReasonCode,
@@ -75,12 +76,7 @@ function formatFare(fare: number | null) {
 }
 
 function formatRideDate(value: string) {
-  return new Date(value).toLocaleString(undefined, {
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTime(value);
 }
 
 import { driverNavItems } from "../driverNav";

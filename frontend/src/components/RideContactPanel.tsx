@@ -1,6 +1,7 @@
 "use client";
 
 import { apiFetch, apiRoutes } from "@/lib/api";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { buildPhoneCallHref } from "@/lib/phoneCall";
 import {
   formatChatExpiry,
@@ -298,10 +299,7 @@ export function RideContactPanel({
                           isMine ? "text-orange-100" : "text-slate-400"
                         }`}
                       >
-                        {new Date(message.created_at).toLocaleTimeString([], {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
+                        {formatDateTime(message.created_at)}
                       </p>
                     ) : null}
                   </div>

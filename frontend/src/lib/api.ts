@@ -129,8 +129,10 @@ export const apiRoutes = {
   adminRideCancel: (rideId: number) => `${API_URL}/admin/rides/${rideId}/cancel`,
   adminRideReassign: (rideId: number) => `${API_URL}/admin/rides/${rideId}/reassign`,
   adminUsers: `${API_URL}/admin/users`,
+  adminUsersTrashed: `${API_URL}/admin/users/trashed`,
   adminUser: (userId: number) => `${API_URL}/admin/users/${userId}`,
   adminUserSuspend: (userId: number) => `${API_URL}/admin/users/${userId}/suspend`,
+  adminUserRestore: (userId: number) => `${API_URL}/admin/users/${userId}/restore`,
   adminSettings: `${API_URL}/admin/settings`,
   adminDriverCompliance: (driverId: number) =>
     `${API_URL}/admin/drivers/${driverId}/compliance`,

@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { adminDownload, adminGet, adminUpload, apiRoutes } from "@/lib/adminApi";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { useEffect, useMemo, useState } from "react";
 import {
   AdminExportButton,
@@ -162,23 +163,89 @@ export default function AdminAnalyticsPage() {
       </section>
 
       <section className="mt-6 rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <h2 className="text-xl font-black">CSV Exports</h2>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <AdminExportButton
-            filename="users.csv"
-            label="Export Users"
-            onExport={(filename) => adminDownload(apiRoutes.adminExportUsers, filename)}
-          />
-          <AdminExportButton
-            filename="drivers.csv"
-            label="Export Drivers"
-            onExport={(filename) => adminDownload(apiRoutes.adminExportDrivers, filename)}
-          />
-          <AdminExportButton
-            filename="rides.csv"
-            label="Export Rides"
-            onExport={(filename) => adminDownload(apiRoutes.adminExportRides, filename)}
-          />
+        <h2 className="text-xl font-black">Exports</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          PDF and Word downloads include the TriWheel logo and report title.
+        </p>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Users</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AdminExportButton
+                filename="users.csv"
+                label="CSV"
+                onExport={(filename) =>
+                  adminDownload(apiRoutes.adminExportUsers, filename, { format: "csv" })
+                }
+              />
+              <AdminExportButton
+                filename="users.pdf"
+                label="PDF"
+                onExport={(filename) =>
+                  adminDownload(apiRoutes.adminExportUsers, filename, { format: "pdf" })
+                }
+              />
+              <AdminExportButton
+                filename="users.doc"
+                label="Word"
+                onExport={(filename) =>
+                  adminDownload(apiRoutes.adminExportUsers, filename, { format: "docx" })
+                }
+              />
+            </div>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Drivers</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AdminExportButton
+                filename="drivers.csv"
+                label="CSV"
+                onExport={(filename) =>
+                  adminDownload(apiRoutes.adminExportDrivers, filename, { format: "csv" })
+                }
+              />
+              <AdminExportButton
+                filename="drivers.pdf"
+                label="PDF"
+                onExport={(filename) =>
+                  adminDownload(apiRoutes.adminExportDrivers, filename, { format: "pdf" })
+                }
+              />
+              <AdminExportButton
+                filename="drivers.doc"
+                label="Word"
+                onExport={(filename) =>
+                  adminDownload(apiRoutes.adminExportDrivers, filename, { format: "docx" })
+                }
+              />
+            </div>
+          </div>
+          <div className="rounded-2xl bg-slate-50 p-4">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Rides</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AdminExportButton
+                filename="rides.csv"
+                label="CSV"
+                onExport={(filename) =>
+                  adminDownload(apiRoutes.adminExportRides, filename, { format: "csv" })
+                }
+              />
+              <AdminExportButton
+                filename="rides.pdf"
+                label="PDF"
+                onExport={(filename) =>
+                  adminDownload(apiRoutes.adminExportRides, filename, { format: "pdf" })
+                }
+              />
+              <AdminExportButton
+                filename="rides.doc"
+                label="Word"
+                onExport={(filename) =>
+                  adminDownload(apiRoutes.adminExportRides, filename, { format: "docx" })
+                }
+              />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -244,6 +311,9 @@ export default function AdminAnalyticsPage() {
             filteredRecent.map((item) => (
               <article className="rounded-2xl bg-slate-50 p-4 text-sm" key={item.id}>
                 <p className="font-black">Ride #{item.id}</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">
+                  {formatDateTime(item.completed_at) || "Completed time unavailable"}
+                </p>
                 <p className="mt-1 text-slate-600">
                   {item.passenger_name} rated {item.driver_name}: {item.passenger_rating ?? "—"}★
                 </p>

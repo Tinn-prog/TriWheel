@@ -1,6 +1,7 @@
 "use client";
 
 import { adminGet, adminPatch, apiRoutes } from "@/lib/adminApi";
+import { formatDateTime } from "@/lib/formatDateTime";
 import { useCallback, useEffect, useState } from "react";
 import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
@@ -164,7 +165,7 @@ export default function AdminRidesPage() {
                 <tr key={ride.id}>
                   <td className="px-5 py-4">
                     <div className="font-black">#{ride.id}</div>
-                    <div className="text-slate-500">{new Date(ride.created_at).toLocaleString()}</div>
+                    <div className="text-slate-500">{formatDateTime(ride.created_at)}</div>
                     {ride.is_emergency ? <span className="mt-1 inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black uppercase text-red-700">Emergency</span> : null}
                   </td>
                   <td className="px-5 py-4">

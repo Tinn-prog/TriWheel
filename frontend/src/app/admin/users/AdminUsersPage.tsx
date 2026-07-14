@@ -1,7 +1,8 @@
 ﻿"use client";
 
-import { adminGet, adminPatch, adminPost, apiRoutes, isSuperAdmin } from "@/lib/adminApi";
+import { adminDelete, adminGet, adminPatch, adminPost, apiRoutes, isSuperAdmin } from "@/lib/adminApi";
 import { formatAdminRoleLabel } from "@/lib/adminRoles";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AdminFilterBar, AdminFilterField, adminInputClass, useDebouncedValue } from "../AdminFilters";
 import { AdminModuleShell, statusClass } from "../AdminModuleShell";
@@ -29,6 +30,7 @@ export function AdminUsersPage() {
   const [editTarget, setEditTarget] = useState<AdminUser | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [suspendTarget, setSuspendTarget] = useState<AdminUser | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
   const [busyUserId, setBusyUserId] = useState<number | null>(null);
   const [roleFilter, setRoleFilter] = useState("");
   const [adminRoleFilter, setAdminRoleFilter] = useState("");
@@ -171,6 +173,31 @@ export function AdminUsersPage() {
     }
   }
 
+  async function deleteUser(user: AdminUser, reason: string) {
+    setBusyUserId(user.id);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await adminDelete(apiRoutes.adminUser(user.id), {
+        deletion_reason: reason,
+      });
+      const data = (await response.json()) as { message?: string };
+
+      if (!response.ok) {
+        throw new Error(data.message ?? "Unable to delete account.");
+      }
+
+      setNotice(data.message ?? "Account deleted and stored for 3 months.");
+      setDeleteTarget(null);
+      await loadUsers();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unable to delete account.");
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
   return (
     <SuperAdminPageGuard>
     <AdminModuleShell
@@ -181,7 +208,13 @@ export function AdminUsersPage() {
       {notice ? <div className="mt-6 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">{notice}</div> : null}
 
       {isSuperAdmin() ? (
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <Link
+            className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-black text-slate-800"
+            href="/superadmin/deleted-accounts"
+          >
+            View Deleted Accounts
+          </Link>
           <button
             className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white"
             onClick={() => setCreateOpen(true)}
@@ -279,6 +312,14 @@ export function AdminUsersPage() {
                           type="button"
                         >
                           {user.is_suspended ? "Unsuspend" : "Suspend"}
+                        </button>
+                        <button
+                          className="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-black text-red-700"
+                          disabled={busyUserId === user.id}
+                          onClick={() => setDeleteTarget(user)}
+                          type="button"
+                        >
+                          Delete
                         </button>
                       </div>
                     ) : (
@@ -393,6 +434,22 @@ export function AdminUsersPage() {
           void toggleSuspend(suspendTarget, reason);
         }}
         title={suspendTarget?.name ?? "User"}
+      />
+
+      <AdminRejectDialog
+        confirmLabel="Delete & Store Account"
+        description="This does not erase the account right away. It is soft-deleted and stored for 3 months under Deleted Accounts. If nobody restores it, it is permanently purged after that."
+        isOpen={deleteTarget !== null}
+        isSubmitting={busyUserId === deleteTarget?.id}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={(reason) => {
+          if (!deleteTarget) {
+            return;
+          }
+
+          void deleteUser(deleteTarget, reason);
+        }}
+        title={deleteTarget?.name ?? "User"}
       />
     </AdminModuleShell>
     </SuperAdminPageGuard>
