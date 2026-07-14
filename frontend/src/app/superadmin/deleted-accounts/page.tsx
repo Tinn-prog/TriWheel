@@ -210,17 +210,21 @@ export default function DeletedAccountsPage() {
                       <td className="px-5 py-4 text-slate-600">{user.deletion_reason || "—"}</td>
                       <td className="px-5 py-4 text-slate-600">{user.deleted_by_name || "—"}</td>
                       <td className="px-5 py-4">
-                        <button
-                          className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-black text-white disabled:bg-slate-300"
-                          disabled={busyUserId === user.id}
-                          onClick={() => void restoreUser(user)}
-                          type="button"
-                        >
-                          {busyUserId === user.id ? "Restoring..." : "Restore"}
-                        </button>
-                        <span className={`ml-2 rounded-full px-3 py-1 text-xs font-black ${statusClass("rejected")}`}>
-                          3-month hold
-                        </span>
+                        <div className="flex flex-nowrap items-center gap-2 whitespace-nowrap">
+                          <button
+                            className="shrink-0 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-black text-white disabled:bg-slate-300"
+                            disabled={busyUserId === user.id}
+                            onClick={() => void restoreUser(user)}
+                            type="button"
+                          >
+                            {busyUserId === user.id ? "Restoring..." : "Restore"}
+                          </button>
+                          <span
+                            className={`shrink-0 rounded-full px-3 py-1 text-xs font-black ${statusClass("rejected")}`}
+                          >
+                            3-month hold
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   ))
