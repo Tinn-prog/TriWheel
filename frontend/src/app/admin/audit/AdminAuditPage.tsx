@@ -35,6 +35,7 @@ const auditActions = [
   "user.soft_deleted",
   "user.restored",
   "user.purged",
+  "user.restore_appeal_submitted",
   "ride.cancelled",
   "ride.reassigned",
   "ride_report.updated",

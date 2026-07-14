@@ -438,7 +438,7 @@ export function AdminUsersPage() {
 
       <AdminRejectDialog
         confirmLabel="Delete & Store Account"
-        description="This does not erase the account right away. It is soft-deleted and stored for 3 months under Deleted Accounts. If nobody restores it, it is permanently purged after that."
+        description="This does not erase the account right away. It is soft-deleted and stored for 3 months. The user can log in and submit a restore appeal. If nobody restores it, it is permanently purged after that."
         isOpen={deleteTarget !== null}
         isSubmitting={busyUserId === deleteTarget?.id}
         onClose={() => setDeleteTarget(null)}

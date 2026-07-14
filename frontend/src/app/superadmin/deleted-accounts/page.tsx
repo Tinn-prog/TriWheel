@@ -21,6 +21,9 @@ type DeletedUser = {
   deleted_by_name: string | null;
   purge_at: string | null;
   retention_months: number;
+  has_restore_appeal: boolean;
+  restore_appeal_message: string | null;
+  restore_appeal_submitted_at: string | null;
 };
 
 function retentionLabel(user: DeletedUser): string {
@@ -50,15 +53,19 @@ export default function DeletedAccountsPage() {
   const [roleFilter, setRoleFilter] = useState("");
   const [adminRoleFilter, setAdminRoleFilter] = useState("");
   const [retentionFilter, setRetentionFilter] = useState("");
+  const [appealFilter, setAppealFilter] = useState("");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
-  const hasActiveFilters = Boolean(search || roleFilter || adminRoleFilter || retentionFilter);
+  const hasActiveFilters = Boolean(
+    search || roleFilter || adminRoleFilter || retentionFilter || appealFilter,
+  );
 
   const loadUsers = useCallback(async () => {
     const response = await adminGet(apiRoutes.adminUsersTrashed, {
       role: roleFilter || undefined,
       admin_role: adminRoleFilter || undefined,
       retention: retentionFilter || undefined,
+      appeal: appealFilter || undefined,
       search: debouncedSearch || undefined,
     });
     const data = (await response.json()) as { message?: string; users?: DeletedUser[] };
@@ -68,7 +75,7 @@ export default function DeletedAccountsPage() {
     }
 
     setUsers(data.users ?? []);
-  }, [adminRoleFilter, debouncedSearch, retentionFilter, roleFilter]);
+  }, [adminRoleFilter, appealFilter, debouncedSearch, retentionFilter, roleFilter]);
 
   useEffect(() => {
     void loadUsers().catch((caughtError) => {
@@ -81,6 +88,7 @@ export default function DeletedAccountsPage() {
     setRoleFilter("");
     setAdminRoleFilter("");
     setRetentionFilter("");
+    setAppealFilter("");
   }
 
   async function restoreUser(user: DeletedUser) {
@@ -108,7 +116,7 @@ export default function DeletedAccountsPage() {
   return (
     <SuperAdminPageGuard>
       <AdminModuleShell
-        description="Soft-deleted accounts stay stored here for 3 months. Restore before the purge date, or the account is permanently deleted and removed from this list."
+        description="Soft-deleted accounts stay stored here for 3 months. Users can appeal for restoration from login. Restore before the purge date, or the account is permanently deleted."
         title="Deleted Accounts"
       >
         {error ? <div className="mt-6 rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</div> : null}
@@ -143,6 +151,17 @@ export default function DeletedAccountsPage() {
               <option value="super_admin">Super Admin</option>
             </select>
           </AdminFilterField>
+          <AdminFilterField label="Appeal">
+            <select
+              className={adminInputClass()}
+              onChange={(event) => setAppealFilter(event.target.value)}
+              value={appealFilter}
+            >
+              <option value="">All</option>
+              <option value="pending">Has restore appeal</option>
+              <option value="none">No appeal yet</option>
+            </select>
+          </AdminFilterField>
           <AdminFilterField label="Retention">
             <select
               className={adminInputClass()}
@@ -173,7 +192,7 @@ export default function DeletedAccountsPage() {
 
         <section className="mt-4 overflow-hidden rounded-[2rem] bg-white shadow-sm ring-1 ring-slate-200">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left text-sm">
+            <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="border-b border-slate-200 text-xs uppercase tracking-[0.18em] text-slate-500">
                 <tr>
                   <th className="px-5 py-3">Account</th>
@@ -181,7 +200,7 @@ export default function DeletedAccountsPage() {
                   <th className="px-5 py-3">Deleted</th>
                   <th className="px-5 py-3">Purge By</th>
                   <th className="px-5 py-3">Reason</th>
-                  <th className="px-5 py-3">Deleted By</th>
+                  <th className="px-5 py-3">Restore Appeal</th>
                   <th className="px-5 py-3">Actions</th>
                 </tr>
               </thead>
@@ -207,8 +226,29 @@ export default function DeletedAccountsPage() {
                         <div>{formatDateTime(user.purge_at) || "—"}</div>
                         <div className="mt-1 text-xs text-slate-400">{retentionLabel(user)}</div>
                       </td>
-                      <td className="px-5 py-4 text-slate-600">{user.deletion_reason || "—"}</td>
-                      <td className="px-5 py-4 text-slate-600">{user.deleted_by_name || "—"}</td>
+                      <td className="px-5 py-4 text-slate-600">
+                        <div>{user.deletion_reason || "—"}</div>
+                        <div className="mt-1 text-xs text-slate-400">
+                          by {user.deleted_by_name || "—"}
+                        </div>
+                      </td>
+                      <td className="max-w-xs px-5 py-4 text-slate-600">
+                        {user.has_restore_appeal ? (
+                          <div>
+                            <span className={`rounded-full px-3 py-1 text-xs font-black ${statusClass("approved")}`}>
+                              Appeal pending
+                            </span>
+                            <div className="mt-2 text-xs text-slate-400">
+                              {formatDateTime(user.restore_appeal_submitted_at) || "—"}
+                            </div>
+                            <p className="mt-2 text-sm leading-5 text-slate-700">
+                              {user.restore_appeal_message || "—"}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">No appeal yet</span>
+                        )}
+                      </td>
                       <td className="px-5 py-4">
                         <div className="flex flex-nowrap items-center gap-2 whitespace-nowrap">
                           <button

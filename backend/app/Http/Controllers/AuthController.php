@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Console\Commands\PurgeExpiredDeletedUsers;
 use App\Mail\TriWheelAlertMail;
 use App\Models\Driver;
 use App\Models\Ride;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\PlatformSetting;
+use App\Services\AdminAuditService;
 use App\Services\DriverSuspensionService;
 use App\Services\EmailVerificationService;
 use App\Services\NotificationService;
@@ -723,7 +725,7 @@ class AuthController extends Controller
             'portal' => ['sometimes', Rule::in(['admin', 'superadmin'])],
         ]);
 
-        $user = User::query()
+        $user = User::withTrashed()
             ->where('email', $credentials['email'])
             ->first();
 
@@ -731,6 +733,27 @@ class AuthController extends Controller
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
+        }
+
+        if ($user->trashed()) {
+            if ($user->permanently_purged_at) {
+                throw ValidationException::withMessages([
+                    'email' => ['The provided credentials are incorrect.'],
+                ]);
+            }
+
+            return response()->json([
+                'message' => 'This account was deleted. You can appeal for restoration while it is still in the retention window.',
+                'code' => 'account_deleted',
+                'account_deleted' => true,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                ],
+                'restore_appeal' => $this->restoreAppealState($user),
+            ], 403);
         }
 
         if (! $user->email_verified_at) {
@@ -790,6 +813,94 @@ class AuthController extends Controller
                 'suspension' => $suspension,
             ]),
         ]);
+    }
+
+    public function submitRestoreAppeal(Request $request, AdminAuditService $audit): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string'],
+            'message' => ['required', 'string', 'min:20', 'max:2000'],
+        ]);
+
+        $user = User::onlyTrashed()
+            ->whereNull('permanently_purged_at')
+            ->where('email', $data['email'])
+            ->first();
+
+        if (! $user || ! Hash::check($data['password'], $user->password)) {
+            return response()->json([
+                'message' => 'Unable to submit a restore appeal with these credentials.',
+            ], 422);
+        }
+
+        if ($user->restore_appeal_submitted_at) {
+            return response()->json([
+                'message' => 'A restore appeal was already submitted. Super Admin will review it.',
+                'restore_appeal' => $this->restoreAppealState($user),
+            ], 422);
+        }
+
+        $user->forceFill([
+            'restore_appeal_message' => trim($data['message']),
+            'restore_appeal_submitted_at' => now(),
+        ])->save();
+
+        $admins = User::query()
+            ->where('role', 'admin')
+            ->where('admin_role', 'super_admin')
+            ->where('is_suspended', false)
+            ->get();
+
+        $this->notifications->notifyMany(
+            $admins,
+            'user.restore_appeal',
+            'Account restore appeal',
+            ($user->name ?? 'A user')." ({$user->role}) appealed for account restoration: ".str($user->restore_appeal_message)->limit(160),
+            '/superadmin/deleted-accounts',
+        );
+
+        if ($admins->isNotEmpty()) {
+            $audit->log($admins->first(), 'user.restore_appeal_submitted', 'user', $user->id, [
+                'email' => $user->email,
+                'role' => $user->role,
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Restore appeal submitted. Super Admin will review your request.',
+            'restore_appeal' => $this->restoreAppealState($user->refresh()),
+        ]);
+    }
+
+    /**
+     * @return array{
+     *     can_submit: bool,
+     *     appeal_submitted: bool,
+     *     appeal_message: ?string,
+     *     appeal_submitted_at: mixed,
+     *     deletion_reason: ?string,
+     *     deleted_at: mixed,
+     *     purge_at: mixed,
+     *     retention_months: int
+     * }
+     */
+    private function restoreAppealState(User $user): array
+    {
+        $purgeAt = $user->deleted_at
+            ? $user->deleted_at->copy()->addMonths(PurgeExpiredDeletedUsers::RETENTION_MONTHS)
+            : null;
+
+        return [
+            'can_submit' => blank($user->restore_appeal_submitted_at) && blank($user->permanently_purged_at),
+            'appeal_submitted' => filled($user->restore_appeal_submitted_at),
+            'appeal_message' => $user->restore_appeal_message,
+            'appeal_submitted_at' => $user->restore_appeal_submitted_at,
+            'deletion_reason' => $user->deletion_reason,
+            'deleted_at' => $user->deleted_at,
+            'purge_at' => $purgeAt,
+            'retention_months' => PurgeExpiredDeletedUsers::RETENTION_MONTHS,
+        ];
     }
 
     public function logout(Request $request): JsonResponse

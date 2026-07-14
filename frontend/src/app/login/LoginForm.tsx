@@ -8,6 +8,10 @@ import {
   readRememberMePreference,
   saveRememberMePreference,
 } from "@/lib/authStorage";
+import {
+  AccountRestoreAppealPanel,
+  type RestoreAppealState,
+} from "@/components/AccountRestoreAppealPanel";
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -25,6 +29,19 @@ type LoginResponse = {
   token: string;
 };
 
+type DeletedAccountLoginResponse = {
+  message?: string;
+  code?: string;
+  account_deleted?: boolean;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
+  restore_appeal?: RestoreAppealState;
+};
+
 type ValidationErrorResponse = {
   message?: string;
   errors?: Record<string, string[]>;
@@ -40,6 +57,7 @@ export function LoginForm({
   portal?: AdminPortal;
 }) {
   const [email, setEmail] = useState(defaultEmail);
+  const [password, setPassword] = useState(defaultPassword);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [resendNotice, setResendNotice] = useState("");
@@ -47,6 +65,11 @@ export function LoginForm({
   const [isResending, setIsResending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
+  const [deletedAccount, setDeletedAccount] = useState<{
+    name: string;
+    email: string;
+    restoreAppeal: RestoreAppealState;
+  } | null>(null);
 
   useEffect(() => {
     setRememberMe(readRememberMePreference());
@@ -98,11 +121,13 @@ export function LoginForm({
     setError("");
     setResendNotice("");
     setNeedsVerification(false);
+    setDeletedAccount(null);
     setIsSubmitting(true);
 
     const formData = new FormData(event.currentTarget);
-    const password = String(formData.get("password") ?? "");
+    const nextPassword = String(formData.get("password") ?? "");
     const remember = formData.get("remember") === "on";
+    setPassword(nextPassword);
 
     try {
       const response = await apiFetch(apiRoutes.login, {
@@ -112,18 +137,38 @@ export function LoginForm({
         },
         body: JSON.stringify({
           email,
-          password,
+          password: nextPassword,
           remember,
           ...(portal ? { portal } : {}),
         }),
       });
 
-      let data: LoginResponse | ValidationErrorResponse;
+      let data: LoginResponse | ValidationErrorResponse | DeletedAccountLoginResponse;
 
       try {
-        data = (await response.json()) as LoginResponse | ValidationErrorResponse;
+        data = (await response.json()) as
+          | LoginResponse
+          | ValidationErrorResponse
+          | DeletedAccountLoginResponse;
       } catch {
         throw new Error("Login request failed. Please try again.");
+      }
+
+      const deleted = data as DeletedAccountLoginResponse;
+
+      if (
+        response.status === 403 &&
+        (deleted.account_deleted || deleted.code === "account_deleted") &&
+        deleted.user &&
+        deleted.restore_appeal
+      ) {
+        setDeletedAccount({
+          name: deleted.user.name,
+          email: deleted.user.email,
+          restoreAppeal: deleted.restore_appeal,
+        });
+        setIsSubmitting(false);
+        return;
       }
 
       if (!response.ok) {
@@ -152,6 +197,31 @@ export function LoginForm({
       );
       setIsSubmitting(false);
     }
+  }
+
+  if (deletedAccount) {
+    return (
+      <div className="mt-8">
+        <AccountRestoreAppealPanel
+          email={deletedAccount.email}
+          onAppealSubmitted={(next) =>
+            setDeletedAccount((current) =>
+              current ? { ...current, restoreAppeal: next } : current,
+            )
+          }
+          password={password}
+          restoreAppeal={deletedAccount.restoreAppeal}
+          userName={deletedAccount.name}
+        />
+        <button
+          className="mt-4 text-sm font-bold text-orange-700 hover:text-orange-800"
+          onClick={() => setDeletedAccount(null)}
+          type="button"
+        >
+          Back to login
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -205,11 +275,12 @@ export function LoginForm({
             <input
               autoComplete="current-password"
               className="tw-input pr-24"
-              defaultValue={defaultPassword}
               name="password"
+              onChange={(event) => setPassword(event.target.value)}
               placeholder="Enter your password"
               required
               type={showPassword ? "text" : "password"}
+              value={password}
             />
             <button
               aria-label={showPassword ? "Hide password" : "Show password"}

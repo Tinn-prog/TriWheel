@@ -54,6 +54,8 @@ class User extends Authenticatable
         'password',
         'deleted_by',
         'deletion_reason',
+        'restore_appeal_message',
+        'restore_appeal_submitted_at',
         'permanently_purged_at',
     ];
 
@@ -90,6 +92,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'reset_expiry' => 'datetime',
             'deleted_at' => 'datetime',
+            'restore_appeal_submitted_at' => 'datetime',
             'permanently_purged_at' => 'datetime',
         ];
     }

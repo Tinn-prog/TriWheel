@@ -85,7 +85,7 @@ export function formatAuditDetailLines(
     });
   }
 
-  if (action === "user.soft_deleted" || action === "user.restored" || action === "user.purged") {
+  if (action === "user.soft_deleted" || action === "user.restored" || action === "user.purged" || action === "user.restore_appeal_submitted") {
     lines.push({
       label: "Account",
       value:
@@ -93,7 +93,9 @@ export function formatAuditDetailLines(
           ? "Deleted (stored 3 months)"
           : action === "user.restored"
             ? "Restored"
-            : "Permanently purged",
+            : action === "user.purged"
+              ? "Permanently purged"
+              : "Restore appeal submitted",
     });
   }
 

@@ -101,6 +101,7 @@ export const apiRoutes = {
   health: `${API_URL}/health`,
   platformConfig: `${API_URL}/platform/config`,
   login: `${API_URL}/login`,
+  accountRestoreAppeal: `${API_URL}/account/restore-appeal`,
   logout: `${API_URL}/logout`,
   forgotPassword: `${API_URL}/forgot-password`,
   resetPassword: `${API_URL}/reset-password`,

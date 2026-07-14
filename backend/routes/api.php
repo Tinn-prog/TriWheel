@@ -39,6 +39,7 @@ Route::get('/platform/config', function (): JsonResponse {
 });
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/account/restore-appeal', [AuthController::class, 'submitRestoreAppeal']);
 Route::post('/logout', [AuthController::class, 'logout']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);

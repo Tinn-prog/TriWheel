@@ -672,6 +672,8 @@ class AdminManagementController extends Controller
         $user->forceFill([
             'deleted_by' => $admin->id,
             'deletion_reason' => trim((string) $data['deletion_reason']),
+            'restore_appeal_message' => null,
+            'restore_appeal_submitted_at' => null,
             'is_suspended' => true,
             'suspension_reason' => $user->suspension_reason ?: 'Account deleted (stored for Super Admin)',
         ])->save();
@@ -707,6 +709,7 @@ class AdminManagementController extends Controller
             'role' => ['sometimes', Rule::in(['admin', 'driver', 'passenger'])],
             'admin_role' => ['sometimes', Rule::in(['operator', 'super_admin'])],
             'retention' => ['sometimes', Rule::in(['expiring_soon', 'due'])],
+            'appeal' => ['sometimes', Rule::in(['pending', 'none'])],
         ]);
 
         $users = User::onlyTrashed()
@@ -716,6 +719,12 @@ class AdminManagementController extends Controller
             ->when(filled($data['role'] ?? null), fn ($query) => $query->where('role', $data['role']))
             ->when(filled($data['admin_role'] ?? null), function ($query) use ($data): void {
                 $query->where('role', 'admin')->where('admin_role', $data['admin_role']);
+            })
+            ->when(($data['appeal'] ?? null) === 'pending', function ($query): void {
+                $query->whereNotNull('restore_appeal_submitted_at');
+            })
+            ->when(($data['appeal'] ?? null) === 'none', function ($query): void {
+                $query->whereNull('restore_appeal_submitted_at');
             })
             ->when(($data['retention'] ?? null) === 'due', function ($query): void {
                 $query->where(
@@ -760,6 +769,8 @@ class AdminManagementController extends Controller
         $user->forceFill([
             'deleted_by' => null,
             'deletion_reason' => null,
+            'restore_appeal_message' => null,
+            'restore_appeal_submitted_at' => null,
             'is_suspended' => false,
             'suspension_reason' => null,
         ])->save();
@@ -967,6 +978,9 @@ class AdminManagementController extends Controller
             'deletion_reason' => $user->deletion_reason,
             'deleted_by' => $user->deleted_by,
             'deleted_by_name' => $user->deletedByAdmin?->name,
+            'restore_appeal_message' => $user->restore_appeal_message,
+            'restore_appeal_submitted_at' => $user->restore_appeal_submitted_at,
+            'has_restore_appeal' => filled($user->restore_appeal_submitted_at),
             'permanently_purged_at' => $user->permanently_purged_at,
             'purge_at' => $purgeAt,
             'retention_months' => PurgeExpiredDeletedUsers::RETENTION_MONTHS,
