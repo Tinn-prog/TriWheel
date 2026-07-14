@@ -26,13 +26,6 @@ export const superAdminNavItems = [
   { href: "/superadmin/analytics", label: "Analytics & Exports" },
 ] as const;
 
-export const superAdminOnlyAdminPaths = [
-  "/admin/users",
-  "/admin/settings",
-  "/admin/audit",
-  "/admin/analytics",
-] as const;
-
 export function formatAdminRoleLabel(adminRole?: string | null) {
   if (adminRole === "super_admin") {
     return "Super Admin";
@@ -51,16 +44,4 @@ export function loginPathForAdminRole(adminRole?: string | null) {
 
 export function loginPathForPortal(portal: AdminPortal) {
   return portal === "superadmin" ? "/superadmin/login" : "/admin/login";
-}
-
-export function portalFromLoginRole(role?: string | null): AdminPortal | null {
-  if (role === "superadmin") {
-    return "superadmin";
-  }
-
-  if (role === "admin") {
-    return "admin";
-  }
-
-  return null;
 }

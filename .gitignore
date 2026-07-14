@@ -26,3 +26,6 @@ backend/database/database.sqlite
 Thumbs.db
 .idea/
 .vscode/
+
+# DFD generator temp screenshots (Puppeteer)
+docs/diagrams/.render-assets*/

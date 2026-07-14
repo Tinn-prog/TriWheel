@@ -57,4 +57,4 @@ Update `backend/.env` before running real MySQL migrations.
 - Laravel API routing is enabled in `backend/routes/api.php`.
 - Domain migrations exist for users, drivers, vehicles, rides, and audit logs.
 - Eloquent models exist for the core TriWheel entities.
-- Next.js has an API URL helper and a migration landing page.
+- Next.js uses a shared API URL helper (`frontend/src/lib/api.ts`) and role-based app routes.

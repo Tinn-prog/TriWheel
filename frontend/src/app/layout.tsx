@@ -12,14 +12,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "TriWheel",
-  description: "TriWheel Next.js frontend migration",
-};
-
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+};
+
+export const metadata: Metadata = {
+  title: "TriWheel",
+  description: "TriWheel — tricycle ride booking for passengers, drivers, and admins.",
 };
 
 export default function RootLayout({
